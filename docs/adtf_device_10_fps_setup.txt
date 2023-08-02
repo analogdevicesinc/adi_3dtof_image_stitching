@@ -1,0 +1,26 @@
+**Steps to change operation mode for ADTF3175D sensors to 10FPS**
+
+For CR and DV type devices:
+
+* open the device configuration file to edit using the following command:-
+    $ vi /home/analog/.ros/config/config_crosby_old_modes.json
+* Next change the "FPS" paramter to "10" as shown below and save the json file.
+    {
+        "VAUX_POWER_VOLTAGE": "18",
+        "DEPTH_INI": "./config/RawToDepthAdsd3500_qmp.ini",
+        "FPS": "10",
+        "FSYNC_MODE": "1"
+    }
+
+
+For AM type devices:
+
+* open the device configuration file to edit using the following command:-
+    $ vi /home/analog/.ros/config/config_crosby_adsd3500_new_modes.json
+* Next change the "FPS" paramter to "10" as shown below and save the json file.
+    {
+        "VAUX_POWER_VOLTAGE": "18",
+        "DEPTH_INI": "./config/RawToDepthAdsd3500_lr-qnative.ini",
+        "FPS": "10",
+        "FSYNC_MODE": "1"
+    }

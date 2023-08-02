@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- ADI 3D ToF Sensor -->
+
+    <!-- General arguments -->
+
+    <!--Launch Delay to help Stitch node synchronize with sensor node publishers-->
+    <arg name="ns_launch_delay" default="5.0" />
+    
+    <!-- Prefix -->
+    <arg name="ns_prefix_cam1" default="cam3" />
+    <!-- Input mode
+        0:Real Time Sensor
+        1:Old bin file format
+        2:Rosbag bin
+    -->
+    <arg name="arg_input_sensor_mode"  default="2"/>
+    <!-- input filename : Applicable only if the input mode is 1 or 2 -->
+    <arg name="arg_in_file_name" default="$(find adi_3dtof_adtf31xx)/../adi_3dtof_input_video_files/adi_3dtof_height_170mm_yaw_0degrees_cam3.bin"  />
+    <!-- Output mode : 0-No file out, 1-file output -->
+    <arg name="arg_output_sensor_mode"  default="0"/>
+    <!-- Height of the sensor from camera in meters -->
+    <arg name="arg_camera_height_from_ground_in_mtr" default="0.0" />
+    <!-- abThreshold -->
+    <arg name="arg_ab_threshold" value="10" />
+    <!-- confidenceThreshold -->
+    <arg name="arg_confidence_threshold" value="10" />
+    <!-- Enable RVL compression for depth and ir images -->
+    <arg name="arg_enable_depth_ir_compression" default="1"/>
+    <!-- Configuration fie name of ToF SDK -->
+    <arg name="arg_config_file_name_of_tof_sdk" value="$(find adi_3dtof_adtf31xx)/config/config_crosby_old_modes.json" />
+
+
+    <!-- Arguments on TF-related info  -->
+    <!-- Camera device frame name -->
+    <arg name="cam1_base_frame_optical" default="$(eval arg('ns_prefix_cam1') + '_adtf31xx_optical')" />
+    <!-- Camera optical frame name -->
+    <arg name="cam1_base_frame" default="$(eval arg('ns_prefix_cam1') + '_adtf31xx')" />
+    <!-- map
+          ^
+          |
+      camera_device
+          ^
+          |
+      camera_optical
+    -->
+    <arg name="cam1_parent_frame" value="map"/>
+    <arg name="cam1_child_frame" value="$(arg cam1_base_frame_optical)"/>
+
+    <!-- Optical to Device rotation, this are standard values, would never change -->
+    <arg name="cam_optical_to_base_roll" value="-1.57"/>
+    <arg name="cam_optical_to_base_pitch" value="0"/>
+    <arg name="cam_optical_to_base_yaw" value="-1.57"/>
+
+    <!-- Camera position wrt map -->
+    <arg name="cam1_pos_x" value="0.111"/>
+    <arg name="cam1_pos_y" value="0.00"/>
+    <arg name="cam1_pos_z" value="$(arg arg_camera_height_from_ground_in_mtr)"/>
+    <arg name="cam1_roll" value="0.0"/>
+    <arg name="cam1_pitch" value="0.0"/>
+    <arg name="cam1_yaw" value="0.0"/>
+
+    <!-- Main Node-->
+    <group ns="$(arg ns_prefix_cam1)">
+        <node name="adi_3dtof_adtf31xx_node" pkg="adi_3dtof_adtf31xx" type="adi_3dtof_adtf31xx_node" output="screen" launch-prefix="bash -c 'sleep $(arg ns_launch_delay); $0 $@' ">
+            <param name="param_camera_link" value="$(arg cam1_base_frame_optical)"/>
+            <param name="param_input_file_name" value="$(arg arg_in_file_name)"/>
+            <param name="param_input_sensor_mode" value="$(arg arg_input_sensor_mode)" />
+            <param name="param_output_sensor_mode" value="$(arg arg_output_sensor_mode)" />
+            <param name="param_enable_depth_ir_compression" value="$(arg arg_enable_depth_ir_compression)"  />
+            <param name="param_ab_threshold" value="$(arg arg_ab_threshold)"/>
+            <param name="param_confidence_threshold" value="$(arg arg_confidence_threshold)" />
+            <param name="param_config_file_name_of_tof_sdk" value="$(arg arg_config_file_name_of_tof_sdk)" />
+        </node>
+
+        <!-- Do the transforms of optical_frame to camera_base frame -->
+        <node pkg="tf2_ros" type="static_transform_publisher" name="$(eval arg('cam1_base_frame_optical') + '_tf')"
+                args="0 0 0 $(arg cam_optical_to_base_yaw) $(arg cam_optical_to_base_pitch) $(arg cam_optical_to_base_roll) $(arg cam1_base_frame) $(arg cam1_child_frame)" />
+
+        <!-- Transform for Camera Base frame and MAP -->
+        <node pkg="tf2_ros" type="static_transform_publisher" name="$(eval arg('cam1_base_frame') + '_tf')"
+          args="$(arg cam1_pos_x) $(arg cam1_pos_y) $(arg cam1_pos_z) $(arg cam1_yaw) $(arg cam1_pitch) $(arg cam1_roll) $(arg cam1_parent_frame) $(arg cam1_base_frame)" />
+
+        <!--Dynamic Reconfigure-->
+        <node name="adi_3dtof_adtf31xx_dynparam_node" pkg="dynamic_reconfigure" type="dynparam" args="set_from_parameters adi_3dtof_adtf31xx_node">
+            <param name = "ab_threshold" type="int" value="$(arg arg_ab_threshold)" />
+            <param name = "confidence_threshold" type="int" value="$(arg arg_confidence_threshold)" />
+        </node>
+
+    </group>
+
+</launch>
