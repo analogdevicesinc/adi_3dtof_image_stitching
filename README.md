@@ -60,14 +60,7 @@ Assumptions before building this package:
 * Setup catkin workspace (with workspace folder named as "catkin_ws"). If not done, follow these [steps](http://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment#:~:text=you%20installed%20ROS.-,Create%20a%20ROS%20Workspace,-catkin).
 * System Date/Time is updated:
 Make sure the Date/Time is set properly before compiling and running the application. Connecting to a WiFi network would make sure the Date/Time is set properly.
-* NTP server is setup for device Synchronization. If not, follow the steps mentioned below to setup NTP server on Host:-
-1. Install ntp ($sudo apt install ntpd)
-2. Add the following line in [/etc/ntp.conf]
-    ```
-    #This line needs to be added individually for each connected Tof Module
-    restrict <Ip address of Tof module> mask 255.255.255.0 nomodify notrap 
-    ```
- (For more information please refer this [Link](https://ubuntuforums.org/showthread.php?t=862620).)
+* NTP server is setup for device Synchronization. If not, please refer this [Link](https://ubuntuforums.org/showthread.php?t=862620) to setup NTP server on Host.
 
 Software Requirements for Running on [AAEON BOXER-8250AI](https://www.aaeon.com/en/p/ai-edge-solutions-nvidia-jetson-xavier-nx-boxer-8250ai) :
 * Nvidia Jetpack OS 5.0.2 .
@@ -149,17 +142,6 @@ These are the default topic names, topic names can be modified as a ROS paramete
 
 ### Subscriber topics
 
-If RVL image-Compression is ENABLED(Default)
-
-+ **/<cam_name>/compressed_ir_image** 
-    - 512X512 16-bit IR image from sensor node compressed with RVL compression 
-+ **/<cam_name>/compressed_depth_image** 
-    - 512X512 16-bit Depth image from sensor node compressed with RVL compression 
-+ **/<cam_name>/camera_info** 
-    - Camera information of the sensor
-
-If RVL image-Compression is DISABLED
-
 + **/<cam_name>/ir_image** 
     - 512X512 16-bit IR image from sensor node  
 + **/<cam_name>/depth_image** 
@@ -180,9 +162,9 @@ If RVL image-Compression is DISABLED
     - The camera names must match the camera name assigned in the adi_3dtof_adtf31xx sensor node for the respective sensors.
 + **param_camera_link** (String, default: "adi_camera_link")
     - Name of camera Link
-+ **param_enable_compressed_data_input** (int, default: 1)
-    - Indicates if RVL compression is enabled for the inputs comming in from the adi_3dtof_adtf31xx sensor nodes
-    - set this to 0 if RVL compression is disabled
++ **image_transport** (String, default: "compressedDepth")
+    - Indicates if Depth compression is enabled for the inputs comming in from the adi_3dtof_adtf31xx sensor nodes
+    - set this to "raw" if Depth compression is disabled
 + **param_output_mode** (int, default: 0)
     - Enables/disables saving of stitched output.
     - set this to 1 to enable video output saving.

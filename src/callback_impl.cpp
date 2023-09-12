@@ -6,7 +6,8 @@ and its licensors.
 #include "adi_3dtof_image_stitching.h"
 #include <ros/ros.h>
 #include <tf2_eigen/tf2_eigen.h>
-#include <compressed_depth_image_transport/rvl_codec.h>
+#include <image_transport/subscriber_filter.h>
+#include <compressed_depth_image_transport/compression_common.h>
 #include "module_profile.h"
 
 #ifdef ENABLE_OPENMP_OPTIMIZATION
@@ -14,6 +15,42 @@ and its licensors.
 #endif
 
 namespace enc = sensor_msgs::image_encodings;
+
+/**
+ * @brief Calculates Yaw correction and updates output size
+ * 
+ * @param image_stitch_input_info - input object to calculate yaw correction
+ */
+void ADI3DToFImageStitching::AutoscaleStitching(ADI3DToFImageStitchingInputInfo* image_stitch_input_info)
+{
+    float horiz_fov_ = abs(camera_yaw_max_ - camera_yaw_min_);  //FOV generated between the yaw of leftmost and rightmost sensors
+    horiz_fov_ = std::min((double)360.0f,((horiz_fov_/M_PI)*180) + horizontal_fov_sensor_in_degrees_) ; //Adding the FOV on either side of extreme end sensors
+
+    camera_yaw_correction_ = 1.5708f - ((horizontal_fov_sensor_in_degrees_/(2*180))*M_PI) - camera_yaw_max_ ; //1.5708f is = pi(starting point of projection) + optical frame yaw (which is 1.57)
+
+    //updating the stitching parameters
+    int updated_out_image_width_ = (int)(ceil(horiz_fov_/horizontal_fov_sensor_in_degrees_) * sensor_image_width_);
+    
+#ifdef ENABLE_GPU_OPTIMIZATION
+    stitch_frames_core_GPU_->update_parameters(updated_out_image_width_, out_image_height_,horiz_fov_, camera_yaw_correction_);
+#else
+    stitch_frames_core_CPU_->update_parameters(updated_out_image_width_, out_image_height_,horiz_fov_, camera_yaw_correction_); 
+#endif
+ 
+    //Update videowriter object to accomodate new frame size
+    if (output_sensor_ != nullptr && updated_out_image_width_!=out_image_width_)
+    {
+      //open a fresh video output file with updated output size
+      output_sensor_->close();
+      output_sensor_->open(output_file_name_, updated_out_image_width_,
+                         out_image_height_);
+    }
+    //Update output width
+    out_image_width_ = updated_out_image_width_;  
+
+    //Update Point cloud size
+    stitched_pc_pcl_->points.resize(out_image_width_ * out_image_height_);
+}
 
 /**
  * @brief Call back for synchronised topics(depth and IR image pair) for 2
@@ -33,6 +70,9 @@ void ADI3DToFImageStitching::sync2CamerasDepthIRImageCallback(const sensor_msgs:
   // Allocate a node
   ADI3DToFImageStitchingInputInfo* image_stitch_input_info =
       new ADI3DToFImageStitchingInputInfo(sensor_image_width_, sensor_image_height_, 2);
+  
+  camera_yaw_min_ = 5.0f;
+  camera_yaw_max_ = -5.0f;
 
   // Call respective callbacks with the id.
   irImageCallback(ir_image_cam1, 0, image_stitch_input_info);
@@ -40,6 +80,16 @@ void ADI3DToFImageStitching::sync2CamerasDepthIRImageCallback(const sensor_msgs:
 
   irImageCallback(ir_image_cam2, 1, image_stitch_input_info);
   depthImageCallback(depth_image_cam2, 1, image_stitch_input_info);
+
+  if (enable_autoscaling_ && !autoscaling_flag_)
+  {
+    if(tf_recvd_[0] && tf_recvd_[1])
+    {
+      //Recenter the point cloud and update projection parameters and output size
+      AutoscaleStitching(image_stitch_input_info);
+      autoscaling_flag_ = true;
+    }
+  }
 
   // Add new node to the queue
   addInputNodeToQueue<ADI3DToFImageStitchingInputInfo>(image_stitch_input_info);
@@ -68,6 +118,9 @@ void ADI3DToFImageStitching::sync3CamerasDepthIRImageCallback(const sensor_msgs:
   // Allocate a node
   ADI3DToFImageStitchingInputInfo* image_stitch_input_info =
       new ADI3DToFImageStitchingInputInfo(sensor_image_width_, sensor_image_height_, 3);
+
+  camera_yaw_min_ = 5.0;
+  camera_yaw_max_ = -5.0;
 
 #ifdef ENABLE_OPENMP_OPTIMIZATION
 #pragma omp parallel sections
@@ -103,6 +156,16 @@ void ADI3DToFImageStitching::sync3CamerasDepthIRImageCallback(const sensor_msgs:
 
 #endif
 
+  if (enable_autoscaling_ && !autoscaling_flag_)
+  {
+    if(tf_recvd_[0] && tf_recvd_[1] && tf_recvd_[2])
+    {
+      //Recenter the point cloud and update projection parameters and output size
+      AutoscaleStitching(image_stitch_input_info);
+      autoscaling_flag_ = true;
+    }
+  }
+
   // Add new node to the queue
   addInputNodeToQueue<ADI3DToFImageStitchingInputInfo>(image_stitch_input_info);
   PROFILE_FUNCTION_END(Message_Callback_processing);
@@ -131,6 +194,9 @@ void ADI3DToFImageStitching::sync4CamerasDepthIRImageCallback(
   // Allocate a node
   ADI3DToFImageStitchingInputInfo* image_stitch_input_info =
       new ADI3DToFImageStitchingInputInfo(sensor_image_width_, sensor_image_height_, 4);
+  
+  camera_yaw_min_ = 5.0;
+  camera_yaw_max_ = -5.0;
 
 #ifdef ENABLE_OPENMP_OPTIMIZATION
 #pragma omp parallel sections
@@ -175,195 +241,18 @@ void ADI3DToFImageStitching::sync4CamerasDepthIRImageCallback(
 
 #endif
 
-  // Add new node to the queue
-  addInputNodeToQueue<ADI3DToFImageStitchingInputInfo>(image_stitch_input_info);
-  PROFILE_FUNCTION_END(Message_Callback_processing);
-}
-
-/**
- * @brief Call back for synchronised topics(Compressed depth and IR image pair) for 2
- * camera configuration
- *
- * @param compressed_depth_image_cam1 - Cam1 depth image pointer
- * @param compressed_ir_image_cam1 - Cam1 IR image pointer
- * @param compressed_depth_image_cam2  - Cam2 depth image pointer
- * @param compressed_ir_image_cam2  - Cam2 IR image pointer
- */
-void ADI3DToFImageStitching::sync2CamerasCompressedDepthIRImageCallback(
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam1,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam1,
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam2,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam2)
-{
-  PROFILE_FUNCTION_START(Message_Callback_processing);
-  // Allocate a node
-  ADI3DToFImageStitchingInputInfo* image_stitch_input_info =
-      new ADI3DToFImageStitchingInputInfo(sensor_image_width_, sensor_image_height_, 2);
-
-#ifdef ENABLE_OPENMP_OPTIMIZATION
-#pragma omp parallel sections
+  if (enable_autoscaling_ && !autoscaling_flag_)
   {
-#pragma omp section
+    if(tf_recvd_[0] && tf_recvd_[1] && tf_recvd_[2] && tf_recvd_[3])
     {
-      compressedirImageCallback(compressed_ir_image_cam1, 0, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam1, 0, image_stitch_input_info);
-    }
-
-#pragma omp section
-    {
-      compressedirImageCallback(compressed_ir_image_cam2, 1, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam2, 1, image_stitch_input_info);
+      //Recenter the point cloud and update projection parameters and output size
+      AutoscaleStitching(image_stitch_input_info);
+      autoscaling_flag_ = true;
     }
   }
-#else
-  // Call respective callbacks with the id.
-  compressedirImageCallback(compressed_ir_image_cam1, 0, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam1, 0, image_stitch_input_info);
-
-  compressedirImageCallback(compressed_ir_image_cam2, 1, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam2, 1, image_stitch_input_info);
-#endif
 
   // Add new node to the queue
   addInputNodeToQueue<ADI3DToFImageStitchingInputInfo>(image_stitch_input_info);
-
-  PROFILE_FUNCTION_END(Message_Callback_processing);
-}
-
-/**
- * @brief Call back for synchronised topics(Compressed depth and IR image pair) for 3
- * camera configuration
- *
- * @param compressed_depth_image_cam1 - Cam1 depth image pointer
- * @param compressed_ir_image_cam1 - Cam1 IR image pointer
- * @param compressed_depth_image_cam2  - Cam2 depth image pointer
- * @param compressed_ir_image_cam2  - Cam2 IR image pointer
- * @param compressed_depth_image_cam3  - Cam3 depth image pointer
- * @param compressed_ir_image_cam3  - Cam3 IR image pointer
- */
-void ADI3DToFImageStitching::sync3CamerasCompressedDepthIRImageCallback(
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam1,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam1,
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam2,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam2,
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam3,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam3)
-{
-  PROFILE_FUNCTION_START(Message_Callback_processing);
-  // Allocate a node
-  ADI3DToFImageStitchingInputInfo* image_stitch_input_info =
-      new ADI3DToFImageStitchingInputInfo(sensor_image_width_, sensor_image_height_, 3);
-
-#ifdef ENABLE_OPENMP_OPTIMIZATION
-#pragma omp parallel sections
-  {
-#pragma omp section
-    {
-      compressedirImageCallback(compressed_ir_image_cam1, 0, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam1, 0, image_stitch_input_info);
-    }
-
-#pragma omp section
-    {
-      compressedirImageCallback(compressed_ir_image_cam2, 1, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam2, 1, image_stitch_input_info);
-    }
-
-#pragma omp section
-    {
-      compressedirImageCallback(compressed_ir_image_cam3, 2, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam3, 2, image_stitch_input_info);
-    }
-  }
-#else
-  // Call respective callbacks with the id.
-  compressedirImageCallback(compressed_ir_image_cam1, 0, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam1, 0, image_stitch_input_info);
-
-  compressedirImageCallback(compressed_ir_image_cam2, 1, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam2, 1, image_stitch_input_info);
-
-  compressedirImageCallback(compressed_ir_image_cam3, 2, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam3, 2, image_stitch_input_info);
-#endif
-
-  // Add new node to the queue
-  addInputNodeToQueue<ADI3DToFImageStitchingInputInfo>(image_stitch_input_info);
-  PROFILE_FUNCTION_END(Message_Callback_processing);
-}
-
-/**
- * @brief Call back for synchronised topics(Compressed depth and IR image pair) for 4
- * camera configuration
- *
- * @param compressed_depth_image_cam1 - Cam1 depth image pointer
- * @param compressed_ir_image_cam1 - Cam1 IR image pointer
- * @param compressed_depth_image_cam2  - Cam2 depth image pointer
- * @param compressed_ir_image_cam2  - Cam2 IR image pointer
- * @param compressed_depth_image_cam3  - Cam3 depth image pointer
- * @param compressed_ir_image_cam3  - Cam3 IR image pointer
- * @param compressed_depth_image_cam4  - Cam4 depth image pointer
- * @param compressed_ir_image_cam4  - Cam4 IR image pointer
- */
-void ADI3DToFImageStitching::sync4CamerasCompressedDepthIRImageCallback(
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam1,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam1,
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam2,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam2,
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam3,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam3,
-    const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam4,
-    const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam4)
-{
-  PROFILE_FUNCTION_START(Message_Callback_processing);
-  // Allocate a node
-  ADI3DToFImageStitchingInputInfo* image_stitch_input_info =
-      new ADI3DToFImageStitchingInputInfo(sensor_image_width_, sensor_image_height_, 4);
-
-#ifdef ENABLE_OPENMP_OPTIMIZATION
-#pragma omp parallel sections
-  {
-#pragma omp section
-    {
-      compressedirImageCallback(compressed_ir_image_cam1, 0, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam1, 0, image_stitch_input_info);
-    }
-
-#pragma omp section
-    {
-      compressedirImageCallback(compressed_ir_image_cam2, 1, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam2, 1, image_stitch_input_info);
-    }
-
-#pragma omp section
-    {
-      compressedirImageCallback(compressed_ir_image_cam3, 2, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam3, 2, image_stitch_input_info);
-    }
-
-#pragma omp section
-    {
-      compressedirImageCallback(compressed_ir_image_cam4, 3, image_stitch_input_info);
-      compresseddepthImageCallback(compressed_depth_image_cam4, 3, image_stitch_input_info);
-    }
-  }
-#else
-  // Call respective callbacks with the id.
-  compressedirImageCallback(compressed_ir_image_cam1, 0, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam1, 0, image_stitch_input_info);
-
-  compressedirImageCallback(compressed_ir_image_cam2, 1, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam2, 1, image_stitch_input_info);
-
-  compressedirImageCallback(compressed_ir_image_cam3, 2, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam3, 2, image_stitch_input_info);
-
-  compressedirImageCallback(compressed_ir_image_cam4, 3, image_stitch_input_info);
-  compresseddepthImageCallback(compressed_depth_image_cam4, 3, image_stitch_input_info);
-#endif
-  // Add new node to the queue
-  addInputNodeToQueue<ADI3DToFImageStitchingInputInfo>(image_stitch_input_info);
-
   PROFILE_FUNCTION_END(Message_Callback_processing);
 }
 
@@ -436,7 +325,7 @@ void ADI3DToFImageStitching::camInfoCallback(const sensor_msgs::CameraInfoConstP
     // Save
     sensor_image_width_ = cam_info->width;
     sensor_image_height_ = cam_info->height;
-    if ((sensor_image_width_ != 512) && (sensor_image_height_ != 512))
+    if ((sensor_image_width_ != 512) || (sensor_image_height_ != 512))
     {
       return;
     }
@@ -480,14 +369,11 @@ void ADI3DToFImageStitching::camInfoCallback(const sensor_msgs::CameraInfoConstP
 void ADI3DToFImageStitching::depthImageCallback(const sensor_msgs::ImageConstPtr& depth_image, int cam_id,
                                         ADI3DToFImageStitchingInputInfo* image_stitch_input_info)
 {
-  int image_width = depth_image->width;
-  int image_height = depth_image->height;
-
-  if (!camera_parameters_updated_[cam_id])
+  if ((depth_image == nullptr))
   {
-    return;
+      return;
   }
-  if ((image_width != 512) && (image_height != 512))
+  if (!camera_parameters_updated_[cam_id])
   {
     return;
   }
@@ -495,6 +381,13 @@ void ADI3DToFImageStitching::depthImageCallback(const sensor_msgs::ImageConstPtr
   {
     return;
   }
+  int image_width = depth_image->width;
+  int image_height = depth_image->height;
+  if ((image_width != 512) || (image_height != 512))
+  {
+    return;
+  }
+
 
   memcpy(image_stitch_input_info->getDepthFrame(cam_id), &depth_image->data[0], image_width * image_height * 2);
 
@@ -511,88 +404,34 @@ void ADI3DToFImageStitching::depthImageCallback(const sensor_msgs::ImageConstPtr
     {
       return;
     }
-    geometry_msgs::TransformStamped transform =
-        tf_buffer_[cam_id].lookupTransform("map", depth_image->header.frame_id, depth_image->header.stamp);
-
-    Eigen::Matrix4f transform4x4 = tf2::transformToEigen(transform.transform).matrix().cast<float>();
-
-    float* transform_matrix = image_stitch_input_info->getTransformMatrix(cam_id);
-    int id = 0;
-    for (int r = 0; r < 4; r++)
+    try
     {
-      for (int c = 0; c < 4; c++)
-      {
-        *transform_matrix++ = transform4x4(r, c);
-      }
+      camera_map_transform_[cam_id] =
+          tf_buffer_[cam_id].lookupTransform("map", depth_image->header.frame_id, depth_image->header.stamp, ros::Duration(1.0f));
     }
-    // tf_recvd_[cam_id]=true;
-  }
-  // Set flag
-  depth_image_recvd_[cam_id] = true;
-}
-
-/**
- * @brief Low-level callback for Compressed depth image
- *
- * @param compressed_depth_image - Pointer to Compressed depth image
- * @param cam_id - Camera ID
- * @param image_stitch_input_info - input object to load recieved depth data
- * Note: depth image is assumed to be 16 bpp image.
- */
-void ADI3DToFImageStitching::compresseddepthImageCallback(const sensor_msgs::CompressedImageConstPtr& compressed_depth_image,
-                                                  int cam_id, ADI3DToFImageStitchingInputInfo* image_stitch_input_info)
-{
-  compressed_depth_image_transport::RvlCodec rvl;
-  // sensor_msgs::ImageConstPtr depth_image_decompressed;
-
-  if ((compressed_depth_image == nullptr))
-  {
-    return;
-  }
-
-  unsigned char* compressed_image_buf = (unsigned char*)&compressed_depth_image->data[8];
-  int compressed_image_buf_size = compressed_depth_image->data.size();
-  unsigned short* raw_image_buf = nullptr;
-
-  int* image_width = (int*)&compressed_depth_image->data[0];
-  int* image_height = (int*)&compressed_depth_image->data[4];
-
-  if (!camera_parameters_updated_[cam_id])
-  {
-    return;
-  }
-  if ((*image_width != 512) && (*image_height != 512))
-  {
-    return;
-  }
-  if (image_stitch_input_info->getDepthFrame(cam_id) == nullptr)
-  {
-    return;
-  }
-
-  // decompress
-  rvl.DecompressRVL(compressed_image_buf, image_stitch_input_info->getDepthFrame(cam_id), *image_width * *image_height);
-
-  // Set frame timestamp
-  image_stitch_input_info->setDepthFrameTimestamp((ros::Time)compressed_depth_image->header.stamp, cam_id);
-
-  if (!tf_recvd_[cam_id])
-  {
-    // Store transform matrix(4x4)
-    // Transform to map
-    // Get the transform wrt to "map"
-    if (!tf_buffer_[cam_id].canTransform("map", compressed_depth_image->header.frame_id,
-                                         compressed_depth_image->header.stamp, ros::Duration(30.0)))
+    catch (tf2::TransformException& ex)
     {
+      ROS_ERROR("Camera to Map TF2 Error: %s\n", ex.what());
       return;
     }
-    geometry_msgs::TransformStamped transform = tf_buffer_[cam_id].lookupTransform(
-        "map", compressed_depth_image->header.frame_id, compressed_depth_image->header.stamp);
 
-    Eigen::Matrix4f transform4x4 = tf2::transformToEigen(transform.transform).matrix().cast<float>();
+    Eigen::Matrix4f transform4x4 = tf2::transformToEigen(camera_map_transform_[cam_id].transform).matrix().cast<float>();
 
-    float* transform_matrix = image_stitch_input_info->getTransformMatrix(cam_id);
-    int id = 0;
+    float* transform_matrix = transform_matrix_[cam_id];
+
+    tf2::Quaternion camera_map_qt(camera_map_transform_[cam_id].transform.rotation.x, camera_map_transform_[cam_id].transform.rotation.y,
+                                camera_map_transform_[cam_id].transform.rotation.z, camera_map_transform_[cam_id].transform.rotation.w);
+    tf2::Matrix3x3 camera_map_rotation_matrix(camera_map_qt);
+    
+    double roll, pitch, yaw;
+    camera_map_rotation_matrix.getRPY(roll, pitch, yaw);
+    camera_yaw_[cam_id]=yaw;
+    if(yaw < camera_yaw_min_)
+      camera_yaw_min_ = yaw;
+    if(yaw > camera_yaw_max_)
+      camera_yaw_max_ = yaw;
+
+    //Create transformation matrix 
     for (int r = 0; r < 4; r++)
     {
       for (int c = 0; c < 4; c++)
@@ -600,8 +439,16 @@ void ADI3DToFImageStitching::compresseddepthImageCallback(const sensor_msgs::Com
         *transform_matrix++ = transform4x4(r, c);
       }
     }
-    // tf_recvd_[cam_id]=true;
+    memcpy(image_stitch_input_info->getTransformMatrix(cam_id), &transform_matrix_[cam_id], 4 * 4 * sizeof(float));
+    //set flag after updating tf
+    tf_recvd_[cam_id] = true;
   }
+  else
+  {
+    //Copying existing transformation data
+    memcpy(image_stitch_input_info->getTransformMatrix(cam_id), &transform_matrix_[cam_id], 4 * 4 * sizeof(float));
+  }
+  
   // Set flag
   depth_image_recvd_[cam_id] = true;
 }
@@ -617,13 +464,17 @@ void ADI3DToFImageStitching::compresseddepthImageCallback(const sensor_msgs::Com
 void ADI3DToFImageStitching::irImageCallback(const sensor_msgs::ImageConstPtr& ir_image, int cam_id,
                                      ADI3DToFImageStitchingInputInfo* image_stitch_input_info)
 {
-  sensor_image_width_ = ir_image->width;
-  sensor_image_height_ = ir_image->height;
+  if ((ir_image == nullptr))
+  {
+    return;
+  }
   if (!camera_parameters_updated_[cam_id])
   {
     return;
   }
-  if ((sensor_image_width_ != 512) && (sensor_image_height_ != 512))
+  sensor_image_width_ = ir_image->width;
+  sensor_image_height_ = ir_image->height;
+  if ((sensor_image_width_ != 512) || (sensor_image_height_ != 512))
   {
     return;
   }
@@ -635,58 +486,6 @@ void ADI3DToFImageStitching::irImageCallback(const sensor_msgs::ImageConstPtr& i
 
     // Set frame timestamp
     image_stitch_input_info->setIRFrameTimestamp((ros::Time)ir_image->header.stamp, cam_id);
-
-    // Set flag
-    ir_image_recvd_[cam_id] = true;
-  }
-}
-
-/**
- * @brief Low-level callback for Compressed IR image
- *
- * @param compressed_ir_image - Compressed IR image message pointer
- * @param cam_id - Camera ID
- * @param image_stitch_input_info - input object to load recieved IR data
- * Note : IR image is 16bpp image
- */
-void ADI3DToFImageStitching::compressedirImageCallback(const sensor_msgs::CompressedImageConstPtr& compressed_ir_image,
-                                               int cam_id, ADI3DToFImageStitchingInputInfo* image_stitch_input_info)
-{
-  compressed_depth_image_transport::RvlCodec rvl;
-  // sensor_msgs::ImageConstPtr ir_image_decompressed;
-  // sensor_msgs::CompressedImage::Ptr comprsd_ptr(new sensor_msgs::CompressedImage());
-  // comprsd_ptr = compressed_ir_image;
-
-  if ((compressed_ir_image == nullptr))
-  {
-    return;
-  }
-
-  unsigned char* compressed_image_buf = (unsigned char*)&compressed_ir_image->data[8];
-  int compressed_image_buf_size = compressed_ir_image->data.size();
-  unsigned short* raw_image_buf = nullptr;
-
-  int* image_width = (int*)&compressed_ir_image->data[0];
-  int* image_height = (int*)&compressed_ir_image->data[4];
-
-  sensor_image_width_ = *image_width;
-  sensor_image_height_ = *image_height;
-  if (!camera_parameters_updated_[cam_id])
-  {
-    return;
-  }
-  if ((sensor_image_width_ != 512) && (sensor_image_height_ != 512))
-  {
-    return;
-  }
-  if (image_stitch_input_info->getDepthFrame(cam_id) != nullptr)
-  {
-    // decompress
-    rvl.DecompressRVL(compressed_image_buf, image_stitch_input_info->getIRFrame(cam_id),
-                      sensor_image_width_ * sensor_image_height_);
-
-    // Set frame timestamp
-    image_stitch_input_info->setIRFrameTimestamp((ros::Time)compressed_ir_image->header.stamp, cam_id);
 
     // Set flag
     ir_image_recvd_[cam_id] = true;

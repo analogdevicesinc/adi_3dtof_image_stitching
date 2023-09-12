@@ -28,11 +28,10 @@
     -->
     <arg name="stitched_cam_parent_frame" value="map"/>
 
-    <!-- enable compressed data input
-        0:Uncompressed output from sensor node
-        1:RVL Compressed output from sensor node
-    -->
-    <arg name="arg_enable_compressed_data_input" default="1"  />
+    <!-- use "raw" for uncompressed subscription
+       "compressed" for compressed image subscription
+       "compressedDepth" for compressed depth image subscription -->
+    <arg name="compression_parameter" default="compressedDepth" />
     <!-- Output mode : 0-No file out, 1-file output -->
     <arg name="arg_output_mode"  default="0"/>
     <!-- output filename : Applicable only if the output mode is 1 -->
@@ -42,7 +41,7 @@
       <node name="adi_3dtof_image_stitching_node" pkg="adi_3dtof_image_stitching" type="adi_3dtof_image_stitching_node" output="screen">
         <rosparam param="param_camera_prefixes" subst_value="True">$(arg arg_camera_prefixes)</rosparam> 
         <param name="param_camera_link" value="$(arg stitched_cam_base_frame)"/>
-        <param name="param_enable_compressed_data_input" value="$(arg arg_enable_compressed_data_input)"/>
+         <param name="image_transport" value="$(arg compression_parameter)" />
         <param name="param_output_mode" value="$(arg arg_output_mode)"/>
         <param name="param_out_file_name" value="$(arg arg_out_file_name)"/>
       </node>

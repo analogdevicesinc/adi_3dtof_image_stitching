@@ -25,6 +25,8 @@ and its licensors.
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
+#include <image_transport/image_transport.h>
+#include <image_transport/subscriber_filter.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/filters/filter.h>
 #include <pcl/filters/voxel_grid.h>
@@ -56,6 +58,7 @@ and its licensors.
 #include <queue>
 
 #define MAX_QUEUE_SIZE_FOR_TIME_SYNC 10
+#define SENSOR_OVERLAP_PERCENT 10.0f
 
 namespace enc = sensor_msgs::image_encodings;
 
@@ -71,25 +74,13 @@ typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::CameraInfo,
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::Image,
                                                         sensor_msgs::Image>
     sync_depth_ir_2;
-typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::CompressedImage, sensor_msgs::CompressedImage,
-                                                        sensor_msgs::CompressedImage, sensor_msgs::CompressedImage>
-    sync_compressed_depth_ir_2;
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::Image,
                                                         sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::Image>
     sync_depth_ir_3;
-typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::CompressedImage, sensor_msgs::CompressedImage,
-                                                        sensor_msgs::CompressedImage, sensor_msgs::CompressedImage,
-                                                        sensor_msgs::CompressedImage, sensor_msgs::CompressedImage>
-    sync_compressed_depth_ir_3;
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::Image,
                                                         sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::Image,
                                                         sensor_msgs::Image, sensor_msgs::Image>
     sync_depth_ir_4;
-typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::CompressedImage, sensor_msgs::CompressedImage,
-                                                        sensor_msgs::CompressedImage, sensor_msgs::CompressedImage,
-                                                        sensor_msgs::CompressedImage, sensor_msgs::CompressedImage,
-                                                        sensor_msgs::CompressedImage, sensor_msgs::CompressedImage>
-    sync_compressed_depth_ir_4;
 
 // Defining Synchronizers
 typedef message_filters::Synchronizer<Sync_CameraInfo_2sensors> sync_CamInfo_2cam;
@@ -98,9 +89,6 @@ typedef message_filters::Synchronizer<Sync_CameraInfo_4sensors> sync_CamInfo_4ca
 typedef message_filters::Synchronizer<sync_depth_ir_2> sync_depth_ir_2cam;
 typedef message_filters::Synchronizer<sync_depth_ir_3> sync_depth_ir_3cam;
 typedef message_filters::Synchronizer<sync_depth_ir_4> sync_depth_ir_4cam;
-typedef message_filters::Synchronizer<sync_compressed_depth_ir_2> sync_compressed_depth_ir_2cam;
-typedef message_filters::Synchronizer<sync_compressed_depth_ir_3> sync_compressed_depth_ir_3cam;
-typedef message_filters::Synchronizer<sync_compressed_depth_ir_4> sync_compressed_depth_ir_4cam;
 
 /**
  * @brief This is main class for this package
@@ -115,7 +103,8 @@ class ADI3DToFImageStitching : public ros::NodeHandle
 public:
   static const int MAX_NUM_DEVICES = 4;
   bool camera_parameters_updated_[MAX_NUM_DEVICES] = { false };
-  float vertical_fov_in_degrees_ = 75.0f;
+  float vertical_fov_sensor_in_degrees_ = 75.0f;
+  float horizontal_fov_sensor_in_degrees_ = 75.0f;
   int out_image_height_ = 512;
   int out_image_width_ = 512 * MAX_NUM_DEVICES;
 
@@ -127,10 +116,11 @@ public:
   {
     ROS_INFO("adi_3dtof_image_stitching::Inside ADI3DToFImageStitching()");
     ros::NodeHandle nh("~");
+    //Initializing image transport
+    it_ = new image_transport::ImageTransport(nh);
 
     // Get Parameters
     nh.param<int>("param_enable_pointcloud_generation", enable_pointcloud_generation_, 2);
-    nh.param<int>("param_enable_compressed_data_input", enable_compressed_data_input_, 0);
     nh.param<int>("param_output_mode", output_sensor_mode_, 0);
     nh.param<std::string>("param_camera_link", camera_link_, "adi_camera_link");
     nh.param<std::string>("param_out_file_name", output_file_name_, "stitched_output.avi");
@@ -146,38 +136,35 @@ public:
       std::cerr << "camera_prefixes: " << cam_prefix[i] << std::endl;
     }
     // Getting projection parameters
-    nh.param<float>("param_vertical_fov_in_degrees", vertical_fov_in_degrees_, 75.0);
-    nh.param<int>("param_out_image_height", out_image_height_, 512);
-    nh.param<int>("param_out_image_width", out_image_width_, 2048);
-
-    //@todo: Image width and height is hard coded.
-    sensor_image_width_ = 512;
-    sensor_image_height_ = 512;
+    nh.param<float>("param_sensor_vertical_fov_in_degrees", vertical_fov_sensor_in_degrees_, 75.0);
+    nh.param<float>("param_sensor_horizontal_fov_in_degrees", horizontal_fov_sensor_in_degrees_, 75.0);
+    nh.param<int>("param_sensor_image_height", sensor_image_height_, 512);
+    nh.param<int>("param_sensor_image_width", sensor_image_width_, 512);
+    nh.param<bool>("param_enable_autoscaling", enable_autoscaling_, true);
 
     // init
     frame_counter_ = 0;
+    //flag to indicate autoscaling is not applied yet
+    autoscaling_flag_ = false;
 
     // Do not allow more than the max cameras supported.
     int max_devices_allowed = static_cast<int>(sizeof(depth_image_subscriber_) / sizeof(depth_image_subscriber_[0]));
     num_sensors_ = std::min(max_devices_allowed, static_cast<int>(cam_prefix.size()));
     input_read_abort_ = false;
 
+    //Setting output width and height for max horizontal sensor combination
+    out_image_width_ = sensor_image_width_ * max_devices_allowed;
+    out_image_height_ = sensor_image_height_;
+
+
     for (int i = 0; i < num_sensors_; i++)
     {
 
       // Synchronized subscribers
       camera_info_subscriber_[i].subscribe(nh, "/" + cam_prefix[i] + "/camera_info", 5);
-      if (enable_compressed_data_input_ == 1)
-      {
-        compressed_ir_image_subscriber_[i].subscribe(nh, "/" + cam_prefix[i] + "/compressed_ir_image", 5);
-        compressed_depth_image_subscriber_[i].subscribe(nh, "/" + cam_prefix[i] + "/compressed_depth_image", 5);
-      }
-      else
-      {
-        ir_image_subscriber_[i].subscribe(nh, "/" + cam_prefix[i] + "/ir_image", 5);
-        depth_image_subscriber_[i].subscribe(nh, "/" + cam_prefix[i] + "/depth_image", 5);
-      }
-
+      ir_image_subscriber_[i].subscribe(*it_, "/" + cam_prefix[i] + "/ir_image", 5);
+      depth_image_subscriber_[i].subscribe(*it_, "/" + cam_prefix[i] + "/depth_image", 5);
+ 
       // Create TF listerner instance
       tf_listener_[i] = new tf2_ros::TransformListener(tf_buffer_[i]);
 
@@ -213,23 +200,11 @@ public:
 
         if (enable_pointcloud_generation_ == 1 || enable_pointcloud_generation_ == 2)
         {
-          if (enable_compressed_data_input_ == 1)
-          {
-            sync_compressed_depth_ir_2cam_.reset(new sync_compressed_depth_ir_2cam(
-                sync_compressed_depth_ir_2(MAX_QUEUE_SIZE_FOR_TIME_SYNC), compressed_depth_image_subscriber_[0],
-                compressed_ir_image_subscriber_[0], compressed_depth_image_subscriber_[1],
-                compressed_ir_image_subscriber_[1]));
-            sync_compressed_depth_ir_2cam_->registerCallback(
-                boost::bind(&ADI3DToFImageStitching::sync2CamerasCompressedDepthIRImageCallback, this, _1, _2, _3, _4));
-          }
-          else
-          {
-            sync_depth_ir_2cam_.reset(new sync_depth_ir_2cam(sync_depth_ir_2(MAX_QUEUE_SIZE_FOR_TIME_SYNC),
-                                                            depth_image_subscriber_[0], ir_image_subscriber_[0],
-                                                            depth_image_subscriber_[1], ir_image_subscriber_[1]));
-            sync_depth_ir_2cam_->registerCallback(
+          sync_depth_ir_2cam_.reset(new sync_depth_ir_2cam(sync_depth_ir_2(MAX_QUEUE_SIZE_FOR_TIME_SYNC),
+                                                          depth_image_subscriber_[0], ir_image_subscriber_[0],
+                                                          depth_image_subscriber_[1], ir_image_subscriber_[1]));
+          sync_depth_ir_2cam_->registerCallback(
                 boost::bind(&ADI3DToFImageStitching::sync2CamerasDepthIRImageCallback, this, _1, _2, _3, _4));
-          }
         }
       }
       catch (...)  {
@@ -246,25 +221,12 @@ public:
 
         if (enable_pointcloud_generation_ == 1 || enable_pointcloud_generation_ == 2)
         {
-          if (enable_compressed_data_input_ == 1)
-          {
-            sync_compressed_depth_ir_3cam_.reset(new sync_compressed_depth_ir_3cam(
-                sync_compressed_depth_ir_3(MAX_QUEUE_SIZE_FOR_TIME_SYNC), compressed_depth_image_subscriber_[0],
-                compressed_ir_image_subscriber_[0], compressed_depth_image_subscriber_[1],
-                compressed_ir_image_subscriber_[1], compressed_depth_image_subscriber_[2],
-                compressed_ir_image_subscriber_[2]));
-            sync_compressed_depth_ir_3cam_->registerCallback(
-                boost::bind(&ADI3DToFImageStitching::sync3CamerasCompressedDepthIRImageCallback, this, _1, _2, _3, _4, _5, _6));
-          }
-          else
-          {
-            sync_depth_ir_3cam_.reset(new sync_depth_ir_3cam(sync_depth_ir_3(MAX_QUEUE_SIZE_FOR_TIME_SYNC),
-                                                            depth_image_subscriber_[0], ir_image_subscriber_[0],
-                                                            depth_image_subscriber_[1], ir_image_subscriber_[1],
-                                                            depth_image_subscriber_[2], ir_image_subscriber_[2]));
-            sync_depth_ir_3cam_->registerCallback(
-                boost::bind(&ADI3DToFImageStitching::sync3CamerasDepthIRImageCallback, this, _1, _2, _3, _4, _5, _6));
-          }
+          sync_depth_ir_3cam_.reset(new sync_depth_ir_3cam(sync_depth_ir_3(MAX_QUEUE_SIZE_FOR_TIME_SYNC),
+                                                          depth_image_subscriber_[0], ir_image_subscriber_[0],
+                                                          depth_image_subscriber_[1], ir_image_subscriber_[1],
+                                                          depth_image_subscriber_[2], ir_image_subscriber_[2]));
+          sync_depth_ir_3cam_->registerCallback(
+              boost::bind(&ADI3DToFImageStitching::sync3CamerasDepthIRImageCallback, this, _1, _2, _3, _4, _5, _6));
         }
       }
       catch (...)  {
@@ -283,26 +245,12 @@ public:
 
         if (enable_pointcloud_generation_ == 1 || enable_pointcloud_generation_ == 2)
         {
-          if (enable_compressed_data_input_ == 1)
-          {
-            sync_compressed_depth_ir_4cam_.reset(new sync_compressed_depth_ir_4cam(
-                sync_compressed_depth_ir_4(MAX_QUEUE_SIZE_FOR_TIME_SYNC), compressed_depth_image_subscriber_[0],
-                compressed_ir_image_subscriber_[0], compressed_depth_image_subscriber_[1],
-                compressed_ir_image_subscriber_[1], compressed_depth_image_subscriber_[2],
-                compressed_ir_image_subscriber_[2], compressed_depth_image_subscriber_[3],
-                compressed_ir_image_subscriber_[3]));
-            sync_compressed_depth_ir_4cam_->registerCallback(boost::bind(
-                &ADI3DToFImageStitching::sync4CamerasCompressedDepthIRImageCallback, this, _1, _2, _3, _4, _5, _6, _7, _8));
-          }
-          else
-          {
-            sync_depth_ir_4cam_.reset(new sync_depth_ir_4cam(
-                sync_depth_ir_4(MAX_QUEUE_SIZE_FOR_TIME_SYNC), depth_image_subscriber_[0], ir_image_subscriber_[0],
-                depth_image_subscriber_[1], ir_image_subscriber_[1], depth_image_subscriber_[2], ir_image_subscriber_[2],
-                depth_image_subscriber_[3], ir_image_subscriber_[3]));
-            sync_depth_ir_4cam_->registerCallback(
-                boost::bind(&ADI3DToFImageStitching::sync4CamerasDepthIRImageCallback, this, _1, _2, _3, _4, _5, _6, _7, _8));
-          }
+          sync_depth_ir_4cam_.reset(new sync_depth_ir_4cam(
+              sync_depth_ir_4(MAX_QUEUE_SIZE_FOR_TIME_SYNC), depth_image_subscriber_[0], ir_image_subscriber_[0],
+              depth_image_subscriber_[1], ir_image_subscriber_[1], depth_image_subscriber_[2], ir_image_subscriber_[2],
+              depth_image_subscriber_[3], ir_image_subscriber_[3]));
+          sync_depth_ir_4cam_->registerCallback(
+              boost::bind(&ADI3DToFImageStitching::sync4CamerasDepthIRImageCallback, this, _1, _2, _3, _4, _5, _6, _7, _8));
         }
       }
       catch (...)  {
@@ -320,13 +268,15 @@ public:
     stitched_pc_pcl_ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
     stitched_pc_pcl_->points.resize(out_image_width_ * out_image_height_);
 
+    float max_stitched_horizontal_FOV = ((horizontal_fov_sensor_in_degrees_*((100-SENSOR_OVERLAP_PERCENT)/100))*(max_devices_allowed-1))+horizontal_fov_sensor_in_degrees_;
+
 #ifdef ENABLE_GPU_OPTIMIZATION
     // GPU class init
     stitch_frames_core_GPU_ = new StitchFramesCoreGPU(sensor_image_width_, sensor_image_height_, out_image_width_,
-                                                      out_image_height_, num_sensors_, vertical_fov_in_degrees_);
+                                                      out_image_height_, num_sensors_, vertical_fov_sensor_in_degrees_, max_stitched_horizontal_FOV);
 #else
      stitch_frames_core_CPU_ = new StitchFramesCoreCPU(sensor_image_width_, sensor_image_height_, out_image_width_,
-                                                      out_image_height_, num_sensors_, vertical_fov_in_degrees_); 
+                                                      out_image_height_, num_sensors_, vertical_fov_sensor_in_degrees_, max_stitched_horizontal_FOV); 
 #endif
 
     input_queue_length_ = 2;
@@ -432,30 +382,6 @@ public:
       const sensor_msgs::ImageConstPtr& depth_image_cam3, const sensor_msgs::ImageConstPtr& ir_image_cam3,
       const sensor_msgs::ImageConstPtr& depth_image_cam4, const sensor_msgs::ImageConstPtr& ir_image_cam4);
 
-  void
-  sync2CamerasCompressedDepthIRImageCallback(const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam1,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam1,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam2,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam2);
-
-  void
-  sync3CamerasCompressedDepthIRImageCallback(const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam1,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam1,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam2,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam2,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam3,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam3);
-
-  void
-  sync4CamerasCompressedDepthIRImageCallback(const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam1,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam1,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam2,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam2,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam3,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam3,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_depth_image_cam4,
-                                             const sensor_msgs::CompressedImageConstPtr& compressed_ir_image_cam4);
-
   void sync2CamerasCamInfoCallback(const sensor_msgs::CameraInfoConstPtr& CameraInfo_cam1,
                                    const sensor_msgs::CameraInfoConstPtr& CameraInfo_cam2);
 
@@ -473,14 +399,10 @@ public:
   void depthImageCallback(const sensor_msgs::ImageConstPtr& depth_image, int cam_id,
                           ADI3DToFImageStitchingInputInfo* image_stitch_input_info);
 
-  void compresseddepthImageCallback(const sensor_msgs::CompressedImageConstPtr& depth_image, int cam_id,
-                                    ADI3DToFImageStitchingInputInfo* image_stitch_input_info);
-
   void irImageCallback(const sensor_msgs::ImageConstPtr& ir_image, int cam_id,
                        ADI3DToFImageStitchingInputInfo* image_stitch_input_info);
 
-  void compressedirImageCallback(const sensor_msgs::CompressedImageConstPtr& ir_image, int cam_id,
-                                 ADI3DToFImageStitchingInputInfo* image_stitch_input_info);
+  void AutoscaleStitching(ADI3DToFImageStitchingInputInfo* image_stitch_input_info);
 
   bool stitchFrames();
 
@@ -513,19 +435,25 @@ private:
   ImageProcUtils* image_proc_utils_[MAX_NUM_DEVICES];
   int enable_pointcloud_generation_;
   int output_sensor_mode_;
-  int enable_compressed_data_input_;
   std::string output_file_name_;
+  bool enable_autoscaling_;
+  bool autoscaling_flag_;
 
+  image_transport::ImageTransport* it_; 
   message_filters::Subscriber<sensor_msgs::CameraInfo> camera_info_subscriber_[MAX_NUM_DEVICES];
-  message_filters::Subscriber<sensor_msgs::Image> ir_image_subscriber_[MAX_NUM_DEVICES];
-  message_filters::Subscriber<sensor_msgs::Image> depth_image_subscriber_[MAX_NUM_DEVICES];
-  message_filters::Subscriber<sensor_msgs::CompressedImage> compressed_ir_image_subscriber_[MAX_NUM_DEVICES];
-  message_filters::Subscriber<sensor_msgs::CompressedImage> compressed_depth_image_subscriber_[MAX_NUM_DEVICES];
+  image_transport::SubscriberFilter depth_image_subscriber_[MAX_NUM_DEVICES];
+  image_transport::SubscriberFilter ir_image_subscriber_[MAX_NUM_DEVICES];
   tf2_ros::Buffer tf_buffer_[MAX_NUM_DEVICES];
   tf2_ros::TransformListener* tf_listener_[MAX_NUM_DEVICES];
   bool ir_image_recvd_[MAX_NUM_DEVICES];
   bool depth_image_recvd_[MAX_NUM_DEVICES];
   bool tf_recvd_[MAX_NUM_DEVICES];
+  float transform_matrix_[MAX_NUM_DEVICES][16];  // a 4x4 matrix for all the sensors
+  float camera_yaw_[MAX_NUM_DEVICES];
+  geometry_msgs::TransformStamped camera_map_transform_[MAX_NUM_DEVICES];
+  float camera_yaw_min_;
+  float camera_yaw_max_;
+  float camera_yaw_correction_;
 
   // Defining synchronizers
   boost::shared_ptr<sync_CamInfo_2cam> sync_CamInfo_2cam_;
@@ -534,9 +462,6 @@ private:
   boost::shared_ptr<sync_depth_ir_2cam> sync_depth_ir_2cam_;
   boost::shared_ptr<sync_depth_ir_3cam> sync_depth_ir_3cam_;
   boost::shared_ptr<sync_depth_ir_4cam> sync_depth_ir_4cam_;
-  boost::shared_ptr<sync_compressed_depth_ir_2cam> sync_compressed_depth_ir_2cam_;
-  boost::shared_ptr<sync_compressed_depth_ir_3cam> sync_compressed_depth_ir_3cam_;
-  boost::shared_ptr<sync_compressed_depth_ir_4cam> sync_compressed_depth_ir_4cam_;
 
   ros::Publisher stitched_depth_image_publisher_;
   ros::Publisher stitched_ir_image_publisher_;

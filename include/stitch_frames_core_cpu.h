@@ -15,11 +15,13 @@ class StitchFramesCoreCPU
 {
 public:
   StitchFramesCoreCPU(int sensor_image_width, int sensor_image_height, int out_image_width, int out_image_height,
-                      int num_sensors, float vertical_fov_in_degrees);
+                      int num_sensors, float vertical_fov_in_degrees, float horizontal_fov_in_degrees);
   
   ~StitchFramesCoreCPU();
 
   void copyRange2XYZLUT(float* range_2_xyz_lut, int cam_id);
+
+  void update_parameters(int out_image_width, int out_image_height, float horizontal_fov_in_degrees, float yaw_correction_in_radians);
 
   void stitchFrames(ADI3DToFImageStitchingInputInfo* image_stitch_input_info, int num_sensors, float* out_xyz_frame,
                     unsigned short* out_depth_frame, unsigned short* out_ir_frame, int* out_lut_3d_to_2d_mapping);
@@ -31,6 +33,8 @@ private:
   int out_image_height_;
   int num_sensors_;
   float vertical_fov_in_degrees_;
+  float horizontal_fov_in_degrees_;
+  float yaw_correction_in_radians_;
 
   // LUT for the Point cloud(512x512)
   float* range_to_xyz_lut_[4];

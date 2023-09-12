@@ -71,11 +71,9 @@ include_directories(
 
 ## Specify path based on host cpu architecture
 if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "aarch64|AARCH64")
-  set(RVL_LIBRARY ${PROJECT_SOURCE_DIR}/libs/libcompressed_depth_image_transport.so)
   set(STITCH_CORE_CPU ${PROJECT_SOURCE_DIR}/libs/libstitch_frames_core.a)
   set(STITCH_CORE_GPU ${PROJECT_SOURCE_DIR}/libs/gpu/libstitch_frames_core.a)
 elseif (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64|X86_64")
-  set(RVL_LIBRARY ${PROJECT_SOURCE_DIR}/libs_linux_x86/libcompressed_depth_image_transport.so)
   set(STITCH_CORE_CPU ${PROJECT_SOURCE_DIR}/libs_linux_x86/libstitch_frames_core.a)
 endif()
 
@@ -101,7 +99,6 @@ if(OPENMP_FOUND AND CUDA_FOUND)
 	  ${catkin_LIBRARIES}
 	  ${OpenCV_LIBRARIES}
     ${OpenMP_LIBS}
-    ${RVL_LIBRARY}
     ${STITCH_CORE_GPU}
   )
 elseif(OPENMP_FOUND)
@@ -109,14 +106,12 @@ elseif(OPENMP_FOUND)
 	  ${catkin_LIBRARIES}
 	  ${OpenCV_LIBRARIES}
     ${OpenMP_LIBS}
-    ${RVL_LIBRARY}
     ${STITCH_CORE_CPU}
   )
 else()
   target_link_libraries(${PROJECT_NAME}_node
     ${catkin_LIBRARIES}
     ${OpenCV_LIBRARIES}
-    ${RVL_LIBRARY}
     ${STITCH_CORE_CPU}
   )
 endif()
@@ -127,10 +122,6 @@ endif()
 
 # all install targets should use catkin DESTINATION variables
 # See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
-
-#Copy the lib to devel / lib
-set(COMPRESSED_DEPTH_IMAGE_TRANSPORT_LIB ${CATKIN_DEVEL_PREFIX}/lib/libcompressed_depth_image_transport.so)
-add_custom_command( TARGET ${PROJECT_NAME}_node POST_BUILD COMMAND cp ${RVL_LIBRARY} ${COMPRESSED_DEPTH_IMAGE_TRANSPORT_LIB} )
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html

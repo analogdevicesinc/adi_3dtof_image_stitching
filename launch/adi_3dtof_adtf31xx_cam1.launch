@@ -11,25 +11,29 @@
     <arg name="ns_prefix_cam1" default="cam1" />
     <!-- Input mode
         0:Real Time Sensor
-        1:Old bin file format
         2:Rosbag bin
     -->
     <arg name="arg_input_sensor_mode"  default="2"/>
-    <!-- input filename : Applicable only if the input mode is 1 or 2 -->
-    <arg name="arg_in_file_name" default="$(find adi_3dtof_adtf31xx)/../adi_3dtof_input_video_files/adi_3dtof_height_170mm_yaw_135degrees_cam1.bin"  />
-    <!-- Output mode : 0-No file out, 1-file output -->
-    <arg name="arg_output_sensor_mode"  default="0"/>
+    <!-- Input filename : Applicable only if the input mode is 2 -->
+    <arg name="arg_in_file_name" default="$(find adi_3dtof_adtf31xx)/../adi_3dtof_input_video_files/adi_3dtof_height_170mm_yaw_135degrees_cam1.bin" />
     <!-- Height of the sensor from camera in meters -->
-    <arg name="arg_camera_height_from_ground_in_mtr" default="0.0" />
+    <arg name="arg_camera_height_from_ground_in_mtr" default="0.15" />
     <!-- abThreshold -->
     <arg name="arg_ab_threshold" value="10" />
     <!-- confidenceThreshold -->
     <arg name="arg_confidence_threshold" value="10" />
     <!-- Enable RVL compression for depth and ir images -->
     <arg name="arg_enable_depth_ir_compression" default="1"/>
-    <!-- Configuration fie name of ToF SDK -->
-    <arg name="arg_config_file_name_of_tof_sdk" value="$(find adi_3dtof_adtf31xx)/config/config_crosby_old_modes.json" />
-
+    <!-- Configuration fie name of ToF SDK 
+        "config_crosby_old_modes.json" - Sensor serial number starting with CR/DV
+        "config_crosby_adsd3500_new_modes.json" - Sensor serial number starting with AM
+    -->
+    <arg name="arg_config_file_name_of_tof_sdk" value="config/config_crosby_old_modes.json" />
+    <!-- Frame Type
+        "qmp" - Sensor serial number starting with CR/DV
+        "lr-qnative" - Sensor serial number starting with AM
+    -->
+    <arg name="arg_frame_type" value="qmp" />
 
     <!-- Arguments on TF-related info  -->
     <!-- Camera device frame name -->
@@ -64,13 +68,13 @@
     <group ns="$(arg ns_prefix_cam1)">
         <node name="adi_3dtof_adtf31xx_node" pkg="adi_3dtof_adtf31xx" type="adi_3dtof_adtf31xx_node" output="screen" launch-prefix="bash -c 'sleep $(arg ns_launch_delay); $0 $@' ">
             <param name="param_camera_link" value="$(arg cam1_base_frame_optical)"/>
-            <param name="param_input_file_name" value="$(arg arg_in_file_name)"/>
             <param name="param_input_sensor_mode" value="$(arg arg_input_sensor_mode)" />
-            <param name="param_output_sensor_mode" value="$(arg arg_output_sensor_mode)" />
+            <param name="param_input_file_name" value="$(arg arg_in_file_name)"/>
+            <param name="param_config_file_name_of_tof_sdk" value="$(arg arg_config_file_name_of_tof_sdk)" />
+            <param name="param_frame_type" value="$(arg arg_frame_type)"/>
             <param name="param_enable_depth_ir_compression" value="$(arg arg_enable_depth_ir_compression)"  />
             <param name="param_ab_threshold" value="$(arg arg_ab_threshold)"/>
             <param name="param_confidence_threshold" value="$(arg arg_confidence_threshold)" />
-            <param name="param_config_file_name_of_tof_sdk" value="$(arg arg_config_file_name_of_tof_sdk)" />
         </node>
 
         <!-- Do the transforms of optical_frame to camera_base frame -->
@@ -90,3 +94,4 @@
     </group>
 
 </launch>
+
