@@ -15,14 +15,16 @@ config_json_file_names = ['config_crosby_old_modes.json',
 config_ini_file_names = ['RawToDepthAdsd3500_qmp.ini',
                          'RawToDepthAdsd3500_lr-qnative.ini']
 
+package_dir = get_package_share_directory('adi_3dtof_adtf31xx') + "/../../../../src/adi_3dtof_adtf31xx/"
 
 def modify_ini_path_in_json_file(config_file_name_of_tof_sdk):
+
     with open(config_file_name_of_tof_sdk, 'r+') as file:
         data = json.load(file)
 
     for i in range(len(config_json_file_names)):
-        if(config_file_name_of_tof_sdk == config_json_file_names[i]):
-            modified_file_path = os.path.join(get_package_share_directory('adi_3dtof_adtf31xx'),"/config", config_ini_file_names[i])
+        if (config_file_name_of_tof_sdk.rsplit("/", 1)[1] == config_json_file_names[i]):
+            modified_file_path = package_dir + "config/" + config_ini_file_names[i] 
 
     data["DEPTH_INI"] = modified_file_path
 
@@ -42,7 +44,7 @@ def generate_launch_description():
 
     # Input filename : Applicable only if the input mode is 2
     # Relative path to the launch file which gets executed. Here, launch file from install folder is considered
-    arg_in_file_name_desc = DeclareLaunchArgument('arg_in_file_name', default_value=get_package_share_directory('adi_3dtof_adtf31xx')+ "/../../../../src/adi_3dtof_input_video_files/adi_3dtof_height_170mm_yaw_67_5degrees_cam2.bin")
+    arg_in_file_name_desc = DeclareLaunchArgument('arg_in_file_name', default_value= package_dir + "../adi_3dtof_input_video_files/adi_3dtof_height_170mm_yaw_67_5degrees_cam2.bin")
 
     # Enable RVL compression for depth and ir images
     arg_enable_depth_ir_compression_desc = DeclareLaunchArgument(
@@ -60,7 +62,7 @@ def generate_launch_description():
     #    "config_crosby_old_modes.json" - Sensor serial number starting with CR/DV - config_json_file_names[0]
     #    "config_crosby_adsd3500_new_modes.json" - Sensor serial number starting with AM - config_json_file_names[1]
     arg_config_file_name_of_tof_sdk_desc = DeclareLaunchArgument(
-        'arg_config_file_name_of_tof_sdk', default_value=config_json_file_names[0])
+        'arg_config_file_name_of_tof_sdk', default_value= package_dir + "config/" + config_json_file_names[0])
 
     # Frame Type
     #    "qmp" - Sensor serial number starting with CR/DV
@@ -70,7 +72,7 @@ def generate_launch_description():
 
     # Modifying the path to ini file in json file.
     if arg_input_sensor_mode_desc.default_value[0].text == '0':
-        modify_ini_path_in_json_file(arg_config_file_name_of_tof_sdk_desc.default_value[0])
+        modify_ini_path_in_json_file(arg_config_file_name_of_tof_sdk_desc.default_value[0].text)
 
     # Parameters for TF
     var_ns_prefix_cam1 = "cam2"

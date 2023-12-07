@@ -211,7 +211,12 @@ Idea is, the individual sensors connected to the host computer(Jetson NX host or
 4. Stitched output can also be saved into a video file by enabling the "enable_video_out" parameter.
 
 To proceed with the test, first execute these following commands on four (4) different terminals (in sequence) to start image capture in the EVAL-ADTF3175D Modules:
-> :memo: _Note: This is assuming that we are testing a 4-camera setup to get a 278 degrees FOV. Reduce the number of terminals accordingly for 2 or 3 camera setup_
+:memo:
+>- This is assuming that we are testing a 4-camera setup to get a 278 degrees FOV. Reduce the number of terminals accordingly for 2 or 3 camera setup.
+>- Please ensure the below mentioned launch files are available inside the launch folder for the adi_3dtof_adtf31xx code present inside the devices. If not please follow the following steps:-
+>> 1. Copy the respective launch files from the launch folder of the adi_3dtof_image_stitching repository to the launch folder of the adi_3dtof_adtf31xx code inside the devices.
+>> 2. Change the 'arg_input_sensor_mode' paameter value to 0 to help run the node in real-time capture mode.
+>> 3. Build the adi_3dtof_adtf31xx node again on the device, so it can access these new launch files.   
 
 | Terminal 1 | Terminal 2  | Terminal 3| Terminal 4|
 --- | --- | ---| --|
