@@ -38,7 +38,7 @@ The image below shows the actual setup used (for reference):
 
 # Hardware setup
 Follow the below mentioned steps to get the hardware setup ready:
-1. Setup the ToF devices with [adi_3dtof_adtf31xx_sensor](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx) node following the steps mentioned in the [repository](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx).
+1. Setup the ToF devices with [adi_3dtof_adtf31xx_sensor](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx) node following the steps mentioned in the [repository](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx/tree/humble-devel).
 2. Ensure all devices are running at `10fps` by following these [steps](./docs/adtf_device_10_fps_setup.txt).
 3. Position the cameras properly as per the dimentions shown in the below Diagram.
 
@@ -200,11 +200,7 @@ To proceed with the test, execute these following command:
 3. Add display for "/adi_3dtof_image_stitching/ir_image" to monitor the Stitched IR output. 
 4. Add display for "/adi_3dtof_image_stitching/point_cloud" to display the 3D point CLoud. 
 
-> :memo: _Notes:_
-> - If the Image Stitching Node is not subscribing/processing the depth and IR Data published by the connected sensors, please ensure the following points are checked:-
-> 1. Ensure that the camera name prefixes for the sensor topics, match the names listed in **param_camera_prefixes** parameter of the image stitching launch file.
-> 2. If the topics published by the sensors are uncompressed, please ensure to change the **param_enable_depth_ir_compression** parameter to **False** too in the launch file of Image Stitching Node.
-> 3. Please ensure the **System Time** across the sensors and the host system is synchronized either using a NTP server or a common Wifi connection. This helps in proper time synchronization of topics recieved from different sensors. 
+
 
 ### Test Real-Time Mode
 To test the Stitching Algorithm on a real-time setup the adi_3dtof_image_stitching node needs to be launched in Host-Only mode
@@ -253,6 +249,9 @@ Next run the adi_3dtof_image_stitching node on Host in the Host-Only mode, by ex
 >>$ chmod +x setup_rmw_settings.sh
 >>$ source setup_rmw_settings.sh
 >>```
+>- If the Image Stitching Node is not subscribing/processing the depth and IR Data published by the connected sensors, please ensure the following points are checked:-
+> 1. Ensure that the camera name prefixes for the sensor topics, match the names listed in **param_camera_prefixes** parameter of the image stitching launch file.
+> 2. If the topics published by the sensors are uncompressed, please ensure to change the **param_enable_depth_ir_compression** parameter to **False** too in the launch file of Image Stitching Node.
 
 **Monitor the Output on Rviz2 Window**
 
@@ -268,7 +267,7 @@ Next run the adi_3dtof_image_stitching node on Host in the Host-Only mode, by ex
 4. Subscribing to stitched point cloud for real-time display might slow down the algorithm operation.
 
 # Known Issues
-1. While using WSL2 on a Windows system to run the [simulation mode demo](###test-simulation-mode) the auto-spawned Rviz2 window may stop in some cases. In such instances please open Rviz2 again from a new terminal and subscribe to the necessary topics to continue. Steps are mentioned [here](####monitor-the-output-on-rviz2-window). 
+1. While using WSL2 on a Windows system to run the [simulation mode demo](#test-simulation-mode) the auto-spawned Rviz2 window may stop in some cases. In such instances please open Rviz2 again from a new terminal and subscribe to the necessary topics to continue. Steps are mentioned [here](#monitor-the-output-on-rviz2-window). 
 
 # Support
 
