@@ -1,23 +1,32 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.5)
 project(adi_3dtof_image_stitching)
 
-## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+#Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
 ## Find catkin macros and libraries
-find_package(catkin REQUIRED COMPONENTS
-  cv_bridge
-  image_view
-  image_geometry
-  image_transport
-  roscpp
-  sensor_msgs
-  std_msgs
-  eigen_conversions
-  tf2
-  tf2_ros
-  pcl_ros
-)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(image_geometry REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(pcl_ros REQUIRED)
+find_package(pcl_conversions  REQUIRED)
+find_package(tf2_eigen REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system)
 
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -43,6 +52,8 @@ if(OPENMP_FOUND)
   set(OpenMP_LIBS gomp)
 endif()
 
+#add_compile_definitions(ENABLE_FUNCTION_PROFILING)
+
 ###################################
 ## catkin specific configuration ##
 ###################################
@@ -50,13 +61,8 @@ endif()
 ## Declare things to be passed to dependent projects
 ## INCLUDE_DIRS: uncomment this if your package contains header files
 ## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES adi_3dtof_image_stitching
-  CATKIN_DEPENDS roscpp std_msgs image_geometry sensor_msgs pcl_ros
-)
+
 
 ###########
 ## Build ##
@@ -65,7 +71,6 @@ catkin_package(
 ## Specify additional locations of header files
 include_directories(
   include
-  ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
 )
 
@@ -81,10 +86,12 @@ endif()
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 if(CUDA_FOUND)
-cuda_add_executable(${PROJECT_NAME}_node src/adi_3dtof_image_stitching.cpp src/stitch_frames.cpp src/callback_impl.cpp src/adi_3dtof_image_stitching_output_thread.cpp src/output_sensor_file.cpp)
+cuda_add_executable(${PROJECT_NAME}_node src/adi_3dtof_image_stitching.cpp src/module_profile.cpp src/stitch_frames.cpp src/callback_impl.cpp src/adi_3dtof_image_stitching_output_thread.cpp src/output_sensor_file.cpp src/ros-perception/image_transport_plugins/compressed_depth_image_transport/rvl_codec.cpp)
 else()
-add_executable(${PROJECT_NAME}_node src/adi_3dtof_image_stitching.cpp src/stitch_frames.cpp src/callback_impl.cpp src/adi_3dtof_image_stitching_output_thread.cpp src/output_sensor_file.cpp)
+add_executable(${PROJECT_NAME}_node src/adi_3dtof_image_stitching.cpp src/module_profile.cpp src/stitch_frames.cpp src/callback_impl.cpp src/adi_3dtof_image_stitching_output_thread.cpp src/output_sensor_file.cpp src/ros-perception/image_transport_plugins/compressed_depth_image_transport/rvl_codec.cpp)
 endif()
+
+ament_target_dependencies(${PROJECT_NAME}_node rclcpp std_msgs sensor_msgs tf2 tf2_ros tf2_geometry_msgs pcl_ros pcl_conversions cv_bridge image_geometry image_transport OpenCV)
 
 if(OPENMP_FOUND)
   target_compile_options(${PROJECT_NAME}_node PRIVATE ${OpenMP_FLAGS})
@@ -96,25 +103,26 @@ endif()
 ## Specify libraries to link a library or executable target against
 if(OPENMP_FOUND AND CUDA_FOUND)
  target_link_libraries(${PROJECT_NAME}_node
-	  ${catkin_LIBRARIES}
+	  ${Boost_SYSTEM_LIBRARY}
 	  ${OpenCV_LIBRARIES}
     ${OpenMP_LIBS}
     ${STITCH_CORE_GPU}
   )
 elseif(OPENMP_FOUND)
  target_link_libraries(${PROJECT_NAME}_node
-	  ${catkin_LIBRARIES}
+	  ${Boost_SYSTEM_LIBRARY}
 	  ${OpenCV_LIBRARIES}
     ${OpenMP_LIBS}
     ${STITCH_CORE_CPU}
   )
 else()
   target_link_libraries(${PROJECT_NAME}_node
-    ${catkin_LIBRARIES}
+    ${Boost_SYSTEM_LIBRARY}
     ${OpenCV_LIBRARIES}
     ${STITCH_CORE_CPU}
   )
 endif()
+
 
 #############
 ## Install ##
@@ -124,10 +132,14 @@ endif()
 # See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
 
 ## Mark executables for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
- install(TARGETS ${PROJECT_NAME}_node
- RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+install(TARGETS ${PROJECT_NAME}_node
+   DESTINATION lib/${PROJECT_NAME}
  )
+install(DIRECTORY rviz 
+DESTINATION share/${PROJECT_NAME})
+
+install(DIRECTORY launch
+DESTINATION share/${PROJECT_NAME})
 
 #############
 ## Testing ##
@@ -137,3 +149,4 @@ endif()
 
 ## Add folders to be run by python nosetests
 
+ament_package()

@@ -3,11 +3,11 @@ Copyright (c), 2023 - Analog Devices Inc. All Rights Reserved.
 This software is PROPRIETARY & CONFIDENTIAL to Analog Devices, Inc.
 and its licensors.
 ******************************************************************************/
-#ifndef __MODULE_PROFILE_H__
-#define __MODULE_PROFILE_H__
+#ifndef MODULE_PROFILE_H
+#define MODULE_PROFILE_H
 
 #ifdef ENABLE_FUNCTION_PROFILING
-extern volatile int* pprof_buff;
+extern volatile int * pprof_buff;
 void dumpFunctionParams(int ID);
 void initProfile(void);
 void closeProfile(void);
@@ -30,8 +30,8 @@ void flushProfile(void);
 #endif /* !ENABLE_FUNCTION_PROFILING */
 
 #ifdef PARSE_FUNCTION
-#define PROFILE_ID_START()                                                                                             \
-  void profile_id_init(void)                                                                                           \
+#define PROFILE_ID_START()   \
+  void profile_id_init(void) \
   {
 #define PROFILE_ID_END() }
 #define PROFILE_ID(id_name, id_num) profiles[id_num].func_name = #id_name;
@@ -42,6 +42,7 @@ void flushProfile(void);
 #endif /* PARSE_FUNCTION */
 
 /* ID list */
+
 PROFILE_ID_START()
 
 PROFILE_ID(ImageStitch_RUN, 0)
@@ -75,4 +76,4 @@ PROFILE_ID(StitchFramesCoreCPU_copyOut, 27)
 
 PROFILE_ID_END()
 
-#endif /* __MODULE_PROFILE_H__ */
+#endif /* MODULE_PROFILE_H */

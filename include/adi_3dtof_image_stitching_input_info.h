@@ -10,8 +10,10 @@ and its licensors.
 #include <cuda.h>
 #include <cuda_runtime.h>
 #endif  //! ENABLE_GPU_OPTIMIZATION
+#include <stdlib.h>
+
 #include <cstring>
-#include <ros/ros.h>
+//#include <rclcpp/rclcpp.hpp>
 
 /**
  * @brief This is the class for input node for Stitch code
@@ -37,18 +39,20 @@ public:
 
 #ifdef ENABLE_GPU_OPTIMIZATION
     // Allocate in Pinned memory
-    for (int i = 0; i < num_sensors_; i++)
-    {
-      cudaMallocHost((unsigned short**)&depth_frame_[i], sizeof(unsigned short) * image_width * image_height);
-      cudaMallocHost((unsigned short**)&ir_frame_[i], sizeof(unsigned short) * image_width * image_height);
+    for (int i = 0; i < num_sensors_; i++) {
+      cudaMallocHost(
+        (unsigned short **)&depth_frame_[i], sizeof(unsigned short) * image_width * image_height);
+      cudaMallocHost(
+        (unsigned short **)&ir_frame_[i], sizeof(unsigned short) * image_width * image_height);
+      depth_frame_timestamp_[i] = 0;
+      ir_frame_timestamp_[i] = 0;
     }
 #else   //! ENABLE_GPU_OPTIMIZATION
-    for (int i = 0; i < num_sensors_; i++)
-    {
+    for (int i = 0; i < num_sensors_; i++) {
       depth_frame_[i] = new unsigned short[image_width * image_height];
       ir_frame_[i] = new unsigned short[image_width * image_height];
-      depth_frame_timestamp_[i] = ros::Time::now();
-      ir_frame_timestamp_[i] = ros::Time::now();
+      depth_frame_timestamp_[i] = 0;
+      ir_frame_timestamp_[i] = 0;
     }
 #endif  //! ENABLE_GPU_OPTIMIZATION
   }
@@ -59,80 +63,55 @@ public:
   ~ADI3DToFImageStitchingInputInfo()
   {
 #ifdef ENABLE_GPU_OPTIMIZATION
-    for (int i = 0; i < num_sensors_; i++)
-    {
-      if (depth_frame_[i] != nullptr)
-      {
+    for (int i = 0; i < num_sensors_; i++) {
+      if (depth_frame_[i] != nullptr) {
         cudaFreeHost(depth_frame_[i]);
       }
-      if (ir_frame_[i] != nullptr)
-      {
+      if (ir_frame_[i] != nullptr) {
         cudaFreeHost(ir_frame_[i]);
       }
     }
 #else   //! ENABLE_GPU_OPTIMIZATION
-    for (int i = 0; i < num_sensors_; i++)
-    {
-      if (depth_frame_[i] != nullptr)
-      {
+    for (int i = 0; i < num_sensors_; i++) {
+      if (depth_frame_[i] != nullptr) {
         delete[] depth_frame_[i];
       }
-      if (ir_frame_[i] != nullptr)
-      {
+      if (ir_frame_[i] != nullptr) {
         delete[] ir_frame_[i];
       }
     }
 #endif  //! ENABLE_GPU_OPTIMIZATION
   }
 
-  unsigned short* getDepthFrame(int cam_id) const
-  {
-    return depth_frame_[cam_id];
-  }
+  unsigned short * getDepthFrame(int cam_id) const { return depth_frame_[cam_id]; }
 
-  unsigned short* getIRFrame(int cam_id) const
-  {
-    return ir_frame_[cam_id];
-  }
+  unsigned short * getIRFrame(int cam_id) const { return ir_frame_[cam_id]; }
 
-  ros::Time getDepthFrameTimestamp(int cam_id) const
-  {
-    return depth_frame_timestamp_[cam_id];
-  }
+  int64_t getDepthFrameTimestamp(int cam_id) const { return depth_frame_timestamp_[cam_id]; }
 
-  ros::Time getIRFrameTimestamp(int cam_id) const
-  {
-    return ir_frame_timestamp_[cam_id];
-  }
+  int64_t getIRFrameTimestamp(int cam_id) const { return ir_frame_timestamp_[cam_id]; }
 
-  void setDepthFrameTimestamp(ros::Time timeDepth, int cam_id)
+  void setDepthFrameTimestamp(int64_t timeDepth, int cam_id)
   {
     depth_frame_timestamp_[cam_id] = timeDepth;
   }
 
-  void setIRFrameTimestamp(ros::Time timeIR, int cam_id)
-  {
-    ir_frame_timestamp_[cam_id] = timeIR;
-  }
+  void setIRFrameTimestamp(int64_t timeIR, int cam_id) { ir_frame_timestamp_[cam_id] = timeIR; }
 
-  float* getTransformMatrix(int cam_id)
-  {
-    return transform_matrix_[cam_id];
-  }
+  float * getTransformMatrix(int cam_id) { return transform_matrix_[cam_id]; }
 
-  int getNumSensors()
-  {
-    return num_sensors_;
-  }
+  int getNumSensors() { return num_sensors_; }
 
   // Assignment operator
-  ADI3DToFImageStitchingInputInfo& operator=(const ADI3DToFImageStitchingInputInfo& rhs)
+  ADI3DToFImageStitchingInputInfo & operator=(const ADI3DToFImageStitchingInputInfo & rhs)
   {
     num_sensors_ = rhs.num_sensors_;
-    for (int i = 0; i < num_sensors_; i++)
-    {
-      memcpy(depth_frame_[i], rhs.depth_frame_[i], sizeof(depth_frame_[i][0]) * image_width_ * image_height_);
-      memcpy(ir_frame_[i], rhs.ir_frame_[i], sizeof(ir_frame_[i][0]) * image_width_ * image_height_);
+    for (int i = 0; i < num_sensors_; i++) {
+      memcpy(
+        depth_frame_[i], rhs.depth_frame_[i],
+        sizeof(depth_frame_[i][0]) * image_width_ * image_height_);
+      memcpy(
+        ir_frame_[i], rhs.ir_frame_[i], sizeof(ir_frame_[i][0]) * image_width_ * image_height_);
       memcpy(transform_matrix_[i], rhs.transform_matrix_[i], sizeof(transform_matrix_[i][0]) * 16);
     }
     return *this;
@@ -142,19 +121,19 @@ private:
   /**
    * @brief Depth image
    */
-  unsigned short* depth_frame_[MAX_NUM_SENSORS];
+  unsigned short * depth_frame_[MAX_NUM_SENSORS];
   /**
    * @brief Depth image
    */
-  ros::Time depth_frame_timestamp_[MAX_NUM_SENSORS];
+  int64_t depth_frame_timestamp_[MAX_NUM_SENSORS];
   /**
    * @brief IR image
    */
-  unsigned short* ir_frame_[MAX_NUM_SENSORS];
+  unsigned short * ir_frame_[MAX_NUM_SENSORS];
   /**
    * @brief IR image
    */
-  ros::Time ir_frame_timestamp_[MAX_NUM_SENSORS];
+  int64_t ir_frame_timestamp_[MAX_NUM_SENSORS];
   /**
    * @brief Image width
    */

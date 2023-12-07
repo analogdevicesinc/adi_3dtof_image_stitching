@@ -7,8 +7,8 @@ and its licensors.
 #ifndef OUTPUT_SENSOR_H
 #define OUTPUT_SENSOR_H
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 /*Video Write*/
 #include <opencv2/core/core.hpp>
@@ -23,8 +23,9 @@ class IOutputSensor
 {
 public:
   virtual void open(std::string input_file_name, int image_width, int image_height) = 0;
-  virtual void write(const cv::Mat& stitched_depth_frame_16bb, const cv::Mat& stitched_ir_frame_16bb,
-                     int image_width, int image_height) = 0;
+  virtual void write(
+    const cv::Mat & stitched_depth_frame_16bb, const cv::Mat & stitched_ir_frame_16bb,
+    int image_width, int image_height) = 0;
   virtual void close() = 0;
 };
 

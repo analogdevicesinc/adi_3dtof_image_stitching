@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">>
+  <profiles>
+    <participant profile_name="locators_alloc_qos" is_default_profile="true">
+      <rtps>
+        <allocation>
+          <remote_locators>
+            <max_unicast_locators>256</max_unicast_locators>
+            <max_multicast_locators>1</max_multicast_locators>
+          </remote_locators>
+        </allocation>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>

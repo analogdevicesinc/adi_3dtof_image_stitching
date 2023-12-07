@@ -5,6 +5,7 @@ and its licensors.
 ******************************************************************************/
 
 #include "output_sensor_file.h"
+
 #include "image_proc_utils.h"
 
 /**
@@ -13,7 +14,7 @@ and its licensors.
 OutputSensorFile::OutputSensorFile()
 {
   video_enabled_ = false;
-  output_video_writer_ = NULL;
+  output_video_writer_ = nullptr;
   output_video_file_name_ = "";
 }
 
@@ -27,9 +28,10 @@ OutputSensorFile::OutputSensorFile()
 void OutputSensorFile::open(std::string input_file_name, int image_width, int image_height)
 {
   // Open output video file
-  openOutputVideoFile(input_file_name, image_width,
-                      image_height * 2);  // Multiplied height by 2 as we will be sending
-                                          // both depth and IR out, vertically concatenated
+  openOutputVideoFile(
+    input_file_name, image_width,
+    image_height * 2);  // Multiplied height by 2 as we will be sending
+                        // both depth and IR out, vertically concatenated
 }
 
 /**
@@ -40,8 +42,9 @@ void OutputSensorFile::open(std::string input_file_name, int image_width, int im
  * @param image_width - input image width
  * @param image_height - input image height
  */
-void OutputSensorFile::write(const cv::Mat& stitched_depth_frame_16bb,
-                             const cv::Mat& stitched_ir_frame_16bb, int image_width, int image_height)
+void OutputSensorFile::write(
+  const cv::Mat & stitched_depth_frame_16bb, const cv::Mat & stitched_ir_frame_16bb,
+  int image_width, int image_height)
 {
   // Get 8bit image
   cv::Mat depth_8bit_image = cv::Mat::zeros(image_height, image_width, CV_8UC1);
@@ -55,7 +58,8 @@ void OutputSensorFile::write(const cv::Mat& stitched_depth_frame_16bb,
 
   // Get 8bit image
   cv::Mat ir_8bit_image = cv::Mat::zeros(image_height, image_width, CV_8UC1);
-  ImageProcUtils::gammaCorrect((unsigned short*)stitched_ir_frame_16bb.data, image_height * image_width);
+  ImageProcUtils::gammaCorrect(
+    (unsigned short *)stitched_ir_frame_16bb.data, image_height * image_width);
   stitched_ir_frame_16bb.convertTo(ir_8bit_image, CV_8UC1, 1, 0);
 
   // Get rgb 8 bit image
@@ -78,10 +82,7 @@ void OutputSensorFile::write(const cv::Mat& stitched_depth_frame_16bb,
  * @brief Closes all opened output files
  *
  */
-void OutputSensorFile::close()
-{
-  closeOutputVideoFile();
-}
+void OutputSensorFile::close() { closeOutputVideoFile(); }
 
 /**
  * @brief Opens output video file
@@ -90,13 +91,14 @@ void OutputSensorFile::close()
  * @param image_width Image Width
  * @param image_height Image Height
  */
-void OutputSensorFile::openOutputVideoFile(const std::string& input_file_name, int image_width, int image_height)
+void OutputSensorFile::openOutputVideoFile(
+  const std::string & input_file_name, int image_width, int image_height)
 {
   output_video_file_name_ = input_file_name.substr(0, input_file_name.find_last_of('.')) + ".avi";
-  output_video_writer_ = new cv::VideoWriter(output_video_file_name_, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10,
-                                             cv::Size(image_width, image_height), true);
-  if (!output_video_writer_->isOpened())
-  {
+  output_video_writer_ = new cv::VideoWriter(
+    output_video_file_name_, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10,
+    cv::Size(image_width, image_height), true);
+  if (!output_video_writer_->isOpened()) {
     std::cout << "Could not open output video file for the input " << input_file_name << std::endl;
   }
 }
@@ -106,10 +108,9 @@ void OutputSensorFile::openOutputVideoFile(const std::string& input_file_name, i
  *
  * @param image Output image
  */
-void OutputSensorFile::writeOutputVideoFile(const cv::Mat& image)
+void OutputSensorFile::writeOutputVideoFile(const cv::Mat & image)
 {
-  if (output_video_writer_->isOpened())
-  {
+  if (output_video_writer_->isOpened()) {
     output_video_writer_->write(image);
   }
 }
@@ -120,8 +121,7 @@ void OutputSensorFile::writeOutputVideoFile(const cv::Mat& image)
  */
 void OutputSensorFile::closeOutputVideoFile()
 {
-  if (output_video_writer_->isOpened())
-  {
+  if (output_video_writer_->isOpened()) {
     output_video_writer_->release();
     output_video_writer_ = nullptr;
   }
