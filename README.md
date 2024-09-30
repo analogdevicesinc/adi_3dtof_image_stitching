@@ -38,7 +38,7 @@ The image below shows the actual setup used (for reference):
 
 # Hardware setup
 Follow the below mentioned steps to get the hardware setup ready:
-1. Setup the ToF devices with [adi_3dtof_adtf31xx_senosor](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx) node following the steps mentioned in the [repository](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx).
+1. Setup the ToF devices with [adi_3dtof_adtf31xx_sensor](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx) node following the steps mentioned in the [repository](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx).
 2. Ensure all devices are running at `10fps` by following these [steps](./docs/adtf_device_10_fps_setup.txt).
 3. Position the cameras properly as per the dimentions shown in the below Diagram.
 
@@ -73,10 +73,11 @@ tag into catkin workspace directory
 
     ```bash
     $ cd ~/catkin_ws/src
-    $ git clone https://github.com/analogdevicesinc/adi_3dtof_image_stitching.git -b v1.0.0
+    $ git clone https://github.com/analogdevicesinc/adi_3dtof_image_stitching.git -b v1.1.0
     ```
 
-# Build
+# Setup
+## Build
 
 Do proper exports first:
 ```bash
@@ -102,25 +103,39 @@ $ catkin_make clean
 $ catkin_make -DCMAKE_BUILD_TYPE=Release -j2
 $ source devel/setup.bash
 ```
-# Launch
+## Preparing the sensors
 
-The launch file accepts 2 modes; Simulation and Real-time.
+### Setting up the IP address
+The default IP address of the sensor is set to `10.42.0.1`. It is essential that each sensor has its own IP to avoid conflicts. To do so, ssh into the sensor with the credentials:
 
-In Simulation mode we run the stitch algorithm on pre-recorded test videos for a 4-sensor setup.
-This mode does not require the use of time-of-flight sensor modules and helps in quick evaluation of stitching Algorithm
-For example, to launch adi_3dtof_image_stitching in Simulation mode, do:
+> ```
+> Username: analog
+> Password: analog
+> ```
+
+1. Update the "Address" field in `/etc/systemd/network/20-wired-usb0.network` file.
+2. Update the `ROS_MASTER_URI` and `ROS_IP` values in `~/.bashrc`. For example,
 ```bash
-$ roslaunch adi_3dtof_image_stitching adi_3dtof_image_stitching.launch
+$ export ROS_MASTER_URI=http://10.43.0.100:11311
+$ export ROS_IP=10.43.0.1
 ```
-> :memo: _Note: Running the adi_3dtof_image_stitching node in Simulation mode requires the setup of adi_3dtof_adtf31xx sensor node to be done before hand.
+3. Update the server address in `/etc/ntp.conf` (`server 10.4x.0.100 iburst`)
+4. Reboot the device and login with the new ip
 
-On the other hand, in Real-time mode, the adi_3dtof_image_stitching node expects real-time Depth and IR inputs from connected EVAL-ADTF3175D Modules to stitch them.
-By default the node expects inputs from 4-sensors. But the contents of the "arg_camera_prefixes" arguement can be changed to support 2 or 3 sensor setups too.
-To launch adi_3dtof_image_stitching in Real-time mode, do:
+### Sharing the launch file
+The sensor modules may be missing the required launch files that designate the transforms for the sensors in 3D space, which is essential the image stitching algorithm to work appropriately. to do so, we transfer the appropriate launch file, refer to the table below, to transfer to the corresponding sensor. Refer to the CAD diagram to determine the location and camera tag.
+|Camera|Launch file|
+|---|---|
+|cam1|adi_3dtof_adtf31xx_cam1.launch|
+|cam2|adi_3dtof_adtf31xx_cam2.launch|
+|cam3|adi_3dtof_adtf31xx_cam3.launch|
+|cam4|adi_3dtof_adtf31xx_cam4.launch|
+
+To transfer the launch file
 ```bash
-$ roslaunch adi_3dtof_image_stitching adi_3dtof_image_stitching_host_only.launch
+$ cd ~/catkin_ws/src/adi_3dtof_image_stitching/launch
+$ scp adi_3dtof_adtf31xx_cam1.launch analog@10.42.0.1:/home/analog/catkin_ws/adi_3dtof_adtf31xx/launch
 ```
-
 # Nodes
 
 ## adi_3dtof_image_stitching_node
@@ -172,15 +187,17 @@ These are the default topic names, topic names can be modified as a ROS paramete
 + **param_out_file_name** (String, default: "stitched_output.avi")
     - output location to save stitched output if "param_output_mode" is enabled.
 
-# Quick Tests
+# Launch
 
-### Test Simulation Mode
+### Simulation Mode
 
 To do a quick test of image Stitching Algorithm, there is a simulation FILEIO setup that you can run.
 Idea is, 4 adi_3dtof_adtf31xx sensor nodes will run in FILEIO mode on recorded vectors, publising sensor Depth and IR data which will be subscribed and processed by adi_3dtof_image_stitching node:
 1. adi_3dtof_adtf31xx reads the binary recorded files and publishes depth_image ir_image and camera_info
 2. The adi_3dtof_image_stitching node subscribes to the incoming data and runs image stitching algorithm on them.
 3. It then publishes stitched Depth and IR images, along with stitched Point-cloud.
+
+The `adi_3dtof_input_video_files` folder contains the binary video files which can be obtained by running the `get_video.sh` script provided by the release file. This folder is to be located in the **source folder of your *workspace***. For example `~/catkin_ws/src`.
 
 > :memo: _Notes_: 
 > - Running the adi_3dtof_image_stitching node in Simulation mode requires the setup of [adi_3dtof_adtf31xx_sensor](https://github.com/analogdevicesinc/adi_3dtof_adtf31xx) node to be done before hand.  
@@ -193,6 +210,8 @@ To proceed with the test, execute these following command:
 --- |
 | <pre>$cd ~/catkin_ws/ <br>$source /opt/ros/noetic/setup.bash <br>$source devel/setup.bash <br>$roslaunch adi_3dtof_image_stitching adi_3dtof_image_stitching.launch |
 
+> When running the launch file, ensure that sensor mode of all the dependant launch files is set to `2`, which sets launch to FILEIO mode.
+
 **Monitor the Output on Rviz Window**
 
 > :memo: _Notes:_
@@ -200,9 +219,8 @@ To proceed with the test, execute these following command:
 > - Add display for "/adi_3dtof_image_stitching/ir_image" to monitor the Stitched IR output. 
 > - Add display for "/adi_3dtof_image_stitching/point_cloud" to display the 3D point CLoud. 
 
-### Test Real-Time Mode
-To test the Stitching Algorithm on a real-time setup the adi_3dtof_image_stitching node needs to be launched in Host-Only mode
-Idea is, the individual sensors connected to the host computer(Jetson NX host or Laptop) will publish their respective Depth and IR data independently in real-time:
+### Real-Time Mode
+To run the Stitching Algorithm on a real-time setup the adi_3dtof_image_stitching node needs to be launched in Host-Only mode. Idea is, the individual sensors connected to the host computer(Jetson NX host or Laptop) will publish their respective Depth and IR data independently in real-time:
 1. Sensors will publish their respective Depth and IR frames of size 512X512 independently
 2. The adi_3dtof_image_stitching node will subscribe to th e incomming data from all sensors, synchronize them and run image stitching.
 3. The stitched output is then published as ROS messages which can be viewed on the Rviz window.
@@ -229,7 +247,18 @@ Next run the adi_3dtof_image_stitching node on Host in the Host-Only mode, by ex
 --- |
 | <pre>$cd ~/catkin_ws/ <br>$source /opt/ros/noetic/setup.bash <br>$source devel/setup.bash <br>$roslaunch adi_3dtof_image_stitching adi_3dtof_image_stitching_host_only.launch |
 
-> :memo: _Note: It is assumed that both adi_3dtof_image_stitching node is built in the location "~/catkin_ws/".
+Remember to edit the list of arguments depending on the number of sensors use. For example, if we were to use only three sensors instead of 4, the line is edited to look like:
+
+Before
+```xml
+<arg name="arg_camera_prefixes" default="[$(arg ns_prefix_cam1),$(arg ns_prefix_cam2),$(arg ns_prefix_cam3),$(arg ns_prefix_cam4)]"/>
+```
+After
+```xml
+<arg name="arg_camera_prefixes" default="[$(arg ns_prefix_cam1),$(arg ns_prefix_cam2),$(arg ns_prefix_cam3)]"/>
+```
+Simply drop the corresponding camera from the list.
+> :memo: *Note: It is assumed that both adi_3dtof_image_stitching node is built in the location "~/catkin_ws/"*.
 
 **Monitor the Output on Rviz Window**
 
