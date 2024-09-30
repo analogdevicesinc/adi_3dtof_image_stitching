@@ -13,7 +13,7 @@
         0:Real Time Sensor
         2:Rosbag bin
     -->
-    <arg name="arg_input_sensor_mode"  default="2"/>
+    <arg name="arg_input_sensor_mode"  default="0"/>
     <!-- Input filename : Applicable only if the input mode is 2 -->
     <arg name="arg_in_file_name" default="$(find adi_3dtof_adtf31xx)/../adi_3dtof_input_video_files/adi_3dtof_height_170mm_yaw_67_5degrees_cam2.bin" />
     <!-- Height of the sensor from camera in meters -->
