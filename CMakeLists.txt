@@ -72,23 +72,16 @@ endif()
 include_directories(
   include
   ${EIGEN3_INCLUDE_DIRS}
+  /opt/ros/humble/include
 )
-
-## Specify path based on host cpu architecture
-if (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "aarch64|AARCH64")
-  set(STITCH_CORE_CPU ${PROJECT_SOURCE_DIR}/libs/libstitch_frames_core.a)
-  set(STITCH_CORE_GPU ${PROJECT_SOURCE_DIR}/libs/gpu/libstitch_frames_core.a)
-elseif (${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64|X86_64")
-  set(STITCH_CORE_CPU ${PROJECT_SOURCE_DIR}/libs_linux_x86/libstitch_frames_core.a)
-endif()
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 if(CUDA_FOUND)
-cuda_add_executable(${PROJECT_NAME}_node src/adi_3dtof_image_stitching.cpp src/module_profile.cpp src/stitch_frames.cpp src/callback_impl.cpp src/adi_3dtof_image_stitching_output_thread.cpp src/output_sensor_file.cpp src/ros-perception/image_transport_plugins/compressed_depth_image_transport/rvl_codec.cpp)
+cuda_add_executable(${PROJECT_NAME}_node src/adi_3dtof_image_stitching.cpp src/module_profile.cpp src/stitch_frames.cpp src/callback_impl.cpp src/adi_3dtof_image_stitching_output_thread.cpp src/output_sensor_file.cpp src/ros-perception/image_transport_plugins/compressed_depth_image_transport/rvl_codec.cpp src/stitch_frames_core_gpu.cu)
 else()
-add_executable(${PROJECT_NAME}_node src/adi_3dtof_image_stitching.cpp src/module_profile.cpp src/stitch_frames.cpp src/callback_impl.cpp src/adi_3dtof_image_stitching_output_thread.cpp src/output_sensor_file.cpp src/ros-perception/image_transport_plugins/compressed_depth_image_transport/rvl_codec.cpp)
+add_executable(${PROJECT_NAME}_node src/adi_3dtof_image_stitching.cpp src/module_profile.cpp src/stitch_frames.cpp src/callback_impl.cpp src/adi_3dtof_image_stitching_output_thread.cpp src/output_sensor_file.cpp src/ros-perception/image_transport_plugins/compressed_depth_image_transport/rvl_codec.cpp src/stitch_frames_core_cpu.cpp)
 endif()
 
 ament_target_dependencies(${PROJECT_NAME}_node rclcpp std_msgs sensor_msgs tf2 tf2_ros tf2_geometry_msgs pcl_ros pcl_conversions cv_bridge image_geometry image_transport OpenCV)
@@ -101,25 +94,16 @@ endif()
 ## same as for the library above
 
 ## Specify libraries to link a library or executable target against
-if(OPENMP_FOUND AND CUDA_FOUND)
+if(OPENMP_FOUND)
  target_link_libraries(${PROJECT_NAME}_node
 	  ${Boost_SYSTEM_LIBRARY}
 	  ${OpenCV_LIBRARIES}
     ${OpenMP_LIBS}
-    ${STITCH_CORE_GPU}
-  )
-elseif(OPENMP_FOUND)
- target_link_libraries(${PROJECT_NAME}_node
-	  ${Boost_SYSTEM_LIBRARY}
-	  ${OpenCV_LIBRARIES}
-    ${OpenMP_LIBS}
-    ${STITCH_CORE_CPU}
   )
 else()
   target_link_libraries(${PROJECT_NAME}_node
     ${Boost_SYSTEM_LIBRARY}
     ${OpenCV_LIBRARIES}
-    ${STITCH_CORE_CPU}
   )
 endif()
 

@@ -48,7 +48,7 @@ void ADI3DToFImageStitching::AutoscaleStitching()
 
 #ifdef ENABLE_GPU_OPTIMIZATION
   stitch_frames_core_GPU_->update_parameters(
-    updated_out_image_width_, out_image_height_, horiz_fov_, camera_yaw_correction_);
+    updated_out_image_width, out_image_height_, horiz_fov, camera_yaw_correction_);
 #else
   stitch_frames_core_CPU_->update_parameters(
     updated_out_image_width, out_image_height_, horiz_fov, camera_yaw_correction_);

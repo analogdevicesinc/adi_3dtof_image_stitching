@@ -69,7 +69,7 @@ Software Requirements for Running on [AAEON BOXER-8250AI](https://www.aaeon.com/
 # Clone
 
 1. Clone the repo and checkout the correct release branch/
-tag into catkin workspace directory
+tag into ros2 workspace directory
 
     ```bash
     $ cd ~/ros2_ws/src
@@ -102,25 +102,47 @@ $ colcon build --cmake-target clean
 $ colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release --event-handlers console_direct+
 $ source install/setup.bash
 ```
-# Launch
+## Preparing the sensors
 
-The launch file accepts 2 modes; Simulation and Real-time.
+### Setting up the IP address
+The default IP address of the sensor is set to `10.42.0.1`. It is essential that each sensor has its own IP to avoid conflicts. To do so, ssh into the sensor with the credentials:
 
-In Simulation mode we run the stitch algorithm on pre-recorded test videos for a 4-sensor setup.
-This mode does not require the use of time-of-flight sensor modules and helps in quick evaluation of stitching Algorithm
-For example, to launch adi_3dtof_image_stitching in Simulation mode, do:
+> ```
+> Username: analog
+> Password: analog
+> ```
+
+1. Update the "Address" field in `/etc/systemd/network/20-wired-usb0.network` file.
+2. Update the server address in `/etc/ntp.conf` (`server 10.4x.0.100 iburst`)
+3. Reboot the device and login with the new ip
+
+### Sharing the launch file
+The sensor modules may be missing the required launch files that designate the transforms for the sensors in 3D space, which is essential the image stitching algorithm to work appropriately. to do so, we transfer the appropriate launch file, refer to the table below, to transfer to the corresponding sensor. Refer to the CAD diagram to determine the location and camera tag.
+|Camera|Launch file|
+|---|---|
+|cam1|adi_3dtof_adtf31xx_cam1_launch.py|
+|cam2|adi_3dtof_adtf31xx_cam2_launch.py|
+|cam3|adi_3dtof_adtf31xx_cam3_launch.py|
+|cam4|adi_3dtof_adtf31xx_cam4_launch.py|
+
+To transfer the launch file
 ```bash
-$ ros2 launch adi_3dtof_image_stitching adi_3dtof_image_stitching_launch.py
+$ cd ~/ros2_ws/src/adi_3dtof_image_stitching/launch
+$ scp adi_3dtof_adtf31xx_cam1.launch analog@10.42.0.1:/home/analog/ros2_ws/adi_3dtof_adtf31xx/launch
 ```
-> :memo: _Note: Running the adi_3dtof_image_stitching node in Simulation mode requires the setup of adi_3dtof_adtf31xx sensor node to be done before hand.
-
-On the other hand, in Real-time mode, the adi_3dtof_image_stitching node expects real-time Depth and IR inputs from connected EVAL-ADTF3175D Modules to stitch them.
-By default the node expects inputs from 4-sensors. But the contents of the "arg_camera_prefixes" arguement can be changed to support 2 or 3 sensor setups too.
-To launch adi_3dtof_image_stitching in Real-time mode, do:
-```bash
-$ ros2 launch adi_3dtof_image_stitching adi_3dtof_image_stitching_host_only_launch.py
-```
-
+>- Ensure rmw settings are updated in all the Devices and the Host to support muti-sensor usecases
+>>```bash
+>> #Update the default rmw xml profile file to the settings file present inside "rmw_config" foler
+>> $ export FASTRTPS_DEFAULT_PROFILES_FILE= ~/ros2_ws/src/adi_3dtof_image_stitching/rmw_config/rmw_settings.xml
+>>#Next restart ROS daemon for the profile changes to take effect
+>>$ ros2 daemon stop
+>>```
+> - The above mentioned steps for rmw settings setup can also be completed by running the "setup_rmw_settings.sh" script present inside the "rmw_config" folder.
+>>```bash
+>>$ cd ~/ros2_ws/src/adi_3dtof_image_stitching/rmw_config
+>>$ chmod +x setup_rmw_settings.sh
+>>$ source setup_rmw_settings.sh
+>>```
 # Nodes
 
 ## adi_3dtof_image_stitching_node
@@ -172,9 +194,9 @@ These are the default topic names, topic names can be modified as a ROS paramete
 + **param_out_file_name** (String, default: "stitched_output.avi")
     - output location to save stitched output if "param_output_mode" is enabled.
 
-# Quick Tests
+# Launch
 
-### Test Simulation Mode
+### Simulation Mode
 
 To do a quick test of image Stitching Algorithm, there is a simulation FILEIO setup that you can run.
 Idea is, 4 adi_3dtof_adtf31xx sensor nodes will run in FILEIO mode on recorded vectors, publising sensor Depth and IR data which will be subscribed and processed by adi_3dtof_image_stitching node:
@@ -200,9 +222,7 @@ To proceed with the test, execute these following command:
 3. Add display for "/adi_3dtof_image_stitching/ir_image" to monitor the Stitched IR output. 
 4. Add display for "/adi_3dtof_image_stitching/point_cloud" to display the 3D point CLoud. 
 
-
-
-### Test Real-Time Mode
+### Real-Time Mode
 To test the Stitching Algorithm on a real-time setup the adi_3dtof_image_stitching node needs to be launched in Host-Only mode
 Idea is, the individual sensors connected to the host computer(Jetson NX host or Laptop) will publish their respective Depth and IR data independently in real-time:
 1. Sensors will publish their respective Depth and IR frames of size 512X512 independently
@@ -240,20 +260,6 @@ Next run the adi_3dtof_image_stitching node on Host in the Host-Only mode, by ex
 :memo: 
 >- It is assumed that both adi_3dtof_image_stitching node is built in the location "~/ros2_ws/".
 >- <span style="color:red">**Make sure that the Date/Time is correctly set for all the devices, this application makes use of the topic Timestamp for synchronization. Hence, if the time is not set properly the application will not run.**</span> 
->
->- Ensure rmw settings are updated in all the Devices and the Host to support muti-sensor usecases
->>```bash
->> #Update the default rmw xml profile file to the settings file present inside "rmw_config" foler
->> $ export FASTRTPS_DEFAULT_PROFILES_FILE= ~/ros2_ws/src/adi_3dtof_image_stitching/rmw_config/rmw_settings.xml
->>#Next restart ROS daemon for the profile changes to take effect
->>$ ros2 daemon stop
->>```
-> - The above mentioned steps for rmw settings setup can also be completed by running the "setup_rmw_settings.sh" script present inside the "rmw_config" folder.
->>```bash
->>$ cd ~/ros2_ws/src/adi_3dtof_image_stitching/rmw_config
->>$ chmod +x setup_rmw_settings.sh
->>$ source setup_rmw_settings.sh
->>```
 >- If the Image Stitching Node is not subscribing/processing the depth and IR Data published by the connected sensors, please ensure the following points are checked:-
 > 1. Ensure that the camera name prefixes for the sensor topics, match the names listed in **param_camera_prefixes** parameter of the image stitching launch file.
 > 2. If the topics published by the sensors are uncompressed, please ensure to change the **param_enable_depth_ir_compression** parameter to **False** too in the launch file of Image Stitching Node.
@@ -272,7 +278,7 @@ Next run the adi_3dtof_image_stitching node on Host in the Host-Only mode, by ex
 4. Subscribing to stitched point cloud for real-time display might slow down the algorithm operation.
 
 # Known Issues
-1. While using WSL2 on a Windows system to run the [simulation mode demo](#test-simulation-mode) the auto-spawned Rviz2 window may stop in some cases. In such instances please open Rviz2 again from a new terminal and subscribe to the necessary topics to continue. Steps are mentioned [here](#monitor-the-output-on-rviz2-window). 
+1. While using WSL2 on a Windows system to run the [simulation mode demo](#simulation-mode) the auto-spawned Rviz2 window may stop in some cases. In such instances please open Rviz2 again from a new terminal and subscribe to the necessary topics to continue. Steps are mentioned [here](#monitor-the-output-on-rviz2-window). 
 
 # Support
 
