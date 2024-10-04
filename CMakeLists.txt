@@ -16,12 +16,14 @@ find_package(catkin REQUIRED COMPONENTS
   eigen_conversions
   tf2
   tf2_ros
+  tf2_geometry_msgs
   pcl_ros
 )
 
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(OpenMP REQUIRED)
+find_package(compressed_depth_image_transport REQUIRED)
 
 if (ENABLE_GPU)
   find_package(CUDA REQUIRED)
@@ -69,6 +71,7 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
+  ${compressed_depth_image_transport_INCLUDE_DIRS}
 )
 
 ## Declare a C++ executable
