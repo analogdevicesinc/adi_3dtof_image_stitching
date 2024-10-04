@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   eigen_conversions
   tf2
   tf2_ros
+  tf2_geometry_msgs
   pcl_ros
 )
 
