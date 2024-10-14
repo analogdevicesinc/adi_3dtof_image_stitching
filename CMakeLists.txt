@@ -117,6 +117,14 @@ endif()
  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
+ install(DIRECTORY launch/
+ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+ )
+
+ install(DIRECTORY rviz/
+ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/rviz
+ )
+
 #############
 ## Testing ##
 #############
