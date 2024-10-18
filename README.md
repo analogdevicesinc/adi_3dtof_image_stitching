@@ -1,4 +1,4 @@
-<h1 style="text-align: center;" > Analog Devices 3DToF Image Stitching</p>
+<h1 style="text-align: center;" > Analog Devices 3DToF Image Stitching</h1>
 
 ---
 # Overview
