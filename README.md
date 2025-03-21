@@ -2,7 +2,7 @@
 
 ---
 # Overview
-The **ADI 3DToF Image Stitching** is a ROS (Robot Operating System) package for stitching depth images from multiple Time-Of-Flight sensors like ADI’s ADTF3175D ToF sensor. This node subscribes to captured Depth and IR images from multiple **ADI 3DToF ADTF31xx** nodes, stitches them to create a single expanded field of view and publishes the stitched Depth, IR and PointCloud as ROS topics. The node publishes Stitched Depth and IR Images at 2048x512 (16 bits per image) resolution @ 10FPS in realtime mode on [AAEON BOXER-8250AI](https://www.aaeon.com/en/p/ai-edge-solutions-nvidia-jetson-xavier-nx-boxer-8250ai), while stitching inputs from 4 different [EVAL-ADTF3175D Sensor Modules](https://www.analog.com/en/design-center/evaluation-hardware-and-software/evaluation-boards-kits/EVAL-ADTF3175.html#eb-overview) and giving an expanded FOV of 278 Degrees. Along with the Stitched Depth and IR frames, the Stitched Point Cloud is also published at 10FPS.
+The **ADI 3DToF Image Stitching** is a ROS (Robot Operating System) package for stitching depth images from multiple Time-Of-Flight sensors like ADI’s ADTF3175D ToF sensor. This node subscribes to captured Depth and IR images from multiple **ADI 3DToF ADTF31xx** nodes, stitches them to create a single expanded field of view and publishes the stitched Depth, IR and PointCloud as ROS topics. The node publishes Stitched Depth and IR Images at 2048x512 (16 bits per image) resolution @ 10FPS in realtime mode on [AAEON BOXER-8250AI](https://www.aaeon.com/en/p/ai-edge-solutions-nvidia-jetson-xavier-nx-boxer-8250ai), while stitching inputs from 4 different [EVAL-ADTF3175D](https://www.analog.com/en/design-center/evaluation-hardware-and-software/evaluation-boards-kits/EVAL-ADTF3175.html#eb-overview) and giving an expanded FOV of 278 Degrees. Along with the Stitched Depth and IR frames, the Stitched Point Cloud is also published at 10FPS.
 
 
 [![Humble](https://img.shields.io/badge/-humble-green?style=plastic&logo=ros)](https://docs.ros.org/en/humble/index.html) [![Ubuntu 22.04](https://img.shields.io/badge/-UBUNTU%2022.04-orange?style=plastic&logo=ubuntu&logoColor=white)](https://releases.ubuntu.com/jammy/) [![Ubuntu 20.04](https://img.shields.io/badge/-UBUNTU%2020.04-orange?style=plastic&logo=ubuntu&logoColor=white)](https://releases.ubuntu.com/focal/) [![License](https://img.shields.io/badge/License-BSD_3--Clause-purple.svg)](./LICENSE) ![ARM64](https://img.shields.io/badge/arm64-blue?style=plastic&logo=arm&logoColor=white) ![x86_64](https://img.shields.io/badge/x86__64-blue?style=plastic&logo=intel&logoColor=white) ![Nvidia Xavier NX](https://img.shields.io/badge/-Xavier--NX-green?style=plastic&logo=nvidia&logoColor=white)
@@ -15,13 +15,13 @@ The **ADI 3DToF Image Stitching** is a ROS (Robot Operating System) package for 
 # Hardware
 
 For the tested setup with GPU inference support, the following are used:
-- 4 x [EVAL-ADTF3175D Modules](https://www.analog.com/en/design-center/evaluation-hardware-and-software/evaluation-boards-kits/EVAL-ADTF3175.html#eb-overview)
+- 4 x [EVAL-ADTF3175D](https://www.analog.com/en/design-center/evaluation-hardware-and-software/evaluation-boards-kits/EVAL-ADTF3175.html#eb-overview)
 - 1 x [AAEON BOXER-8250AI](https://www.aaeon.com/en/p/ai-edge-solutions-nvidia-jetson-xavier-nx-boxer-8250ai)
 - 1 x External 12V power supply
 - 4 x Usb type-c to type-A cables - with 5gbps data speed support
 
 Minimum requirements for a test setup on host laptop/computer CPU:
-- 2 x [EVAL-ADTF3175D Modules](https://www.analog.com/en/design-center/evaluation-hardware-and-software/evaluation-boards-kits/EVAL-ADTF3175.html#eb-overview)
+- 2 x [EVAL-ADTF3175D](https://www.analog.com/en/design-center/evaluation-hardware-and-software/evaluation-boards-kits/EVAL-ADTF3175.html#eb-overview)
 - Host laptop with intel i5 or higher cpu running Ubuntu-20.04LTS or WSL2 with Ubuntu-20.04
 - 2 x USB type-c to type-A cables - with 5gbps data speed support
 - USB power hub
@@ -147,7 +147,7 @@ $ scp adi_3dtof_adtf31xx_cam1.launch analog@10.42.0.1:/home/analog/ros2_ws/adi_3
 
 ## adi_3dtof_image_stitching_node
 
-> :memo: _Note: For those with <cam_name> in the topic names, these are ideally the names assigned for EVAL-ADTF3175D camera modules. For example, if there are 2 cameras used, with the names as cam1 and cam2 ,there should be two subscribed topics for depth_image, specifically /cam1/depth_image for camra 1 and then /cam2/depth_image for camera 2._
+> :memo: _Note: For those with <cam_name> in the topic names, these are ideally the names assigned for EVAL-ADTF3175D. For example, if there are 2 cameras used, with the names as cam1 and cam2 ,there should be two subscribed topics for depth_image, specifically /cam1/depth_image for camra 1 and then /cam2/depth_image for camera 2._
 
 ### Published topics
 
@@ -230,7 +230,7 @@ Idea is, the individual sensors connected to the host computer(Jetson NX host or
 3. The stitched output is then published as ROS messages which can be viewed on the Rviz2 window.
 4. Stitched output can also be saved into a video file by enabling the "enable_video_out" parameter.
 
-To proceed with the test, first execute these following commands on four (4) different terminals (in sequence) to start image capture in the EVAL-ADTF3175D Modules:
+To proceed with the test, first execute these following commands on four (4) different terminals (in sequence) to start image capture in the EVAL-ADTF3175D:
 :memo:
 >- This is assuming that we are testing a 4-camera setup to get a 278 degrees FOV. Reduce the number of terminals accordingly for 2 or 3 camera setup.
 >- Please ensure the below mentioned launch files are available inside the launch folder for the adi_3dtof_adtf31xx code present inside the devices. If not please follow the following steps:-
@@ -243,7 +243,7 @@ To proceed with the test, first execute these following commands on four (4) dif
 |<pre>~$ ssh analog@[ip of cam1] <br>>cd ~/ros2_ws/ <br>>source /opt/ros/humble/install/setup.bash <br>>source install/setup.bash <br>>ros2 launch adi_3dtof_adtf31xx adi_3dtof_adtf31xx_cam1_launch.py | <pre>~$ ssh analog@[ip of cam2] <br>>cd ~/ros2_ws/ <br>>source /opt/ros/humble/install/setup.bash <br>>source install/setup.bash <br>>ros2 launch adi_3dtof_adtf31xx adi_3dtof_adtf31xx_cam2_launch.py | <pre>~$ ssh analog@[ip of cam3] <br>>cd ~/ros2_ws/ <br>>source /opt/ros/humble/install/setup.bash <br>>source install/setup.bash <br>>ros2 launch adi_3dtof_adtf31xx adi_3dtof_adtf31xx_cam3_launch.py | <pre>~$ ssh analog@[ip of cam4] <br>>cd ~/ros2_ws/ <br>>source /opt/ros/humble/install/setup.bash <br>>source install/setup.bash <br>>ros2 launch adi_3dtof_adtf31xx adi_3dtof_adtf31xx_cam4_launch.py |
 
 > :memo: _Notes: 
->- Its assumed that the adi_3dtof_adtf31xx nodes are already built within the EVAL-ADTF3175D Modules. It is also assumed that adi_3dtof_adtf31xx node are built in the location "~/ros2_ws/" within the sensor modules.
+>- Its assumed that the adi_3dtof_adtf31xx nodes are already built within the EVAL-ADTF3175D. It is also assumed that adi_3dtof_adtf31xx node are built in the location "~/ros2_ws/" within the sensor modules.
 >- It is assumed that the respective sensor launch files from the adi_3dtfo_image_stitching package are copied to the launch folder of adi_3dtof_adtf31xx package within the respective sensors and the input mode is changed to 0.(it is 2 by default)_
 >- The credentials to login to the devices is given below
 >   ```
