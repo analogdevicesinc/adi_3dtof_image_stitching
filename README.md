@@ -73,7 +73,7 @@ tag into ros2 workspace directory
 
     ```bash
     $ cd ~/ros2_ws/src
-    $ git clone https://github.com/analogdevicesinc/adi_3dtof_image_stitching.git -b v2.0.0
+    $ git clone https://github.com/analogdevicesinc/adi_3dtof_image_stitching.git -b v2.1.0
     ```
 
 # Build
